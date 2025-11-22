@@ -1,8 +1,9 @@
 import re
-from cinescrapper import cine_helper
+from cinescrapper import cine_helper, apple_music_client
 from cinescrapper import cine_parser
 from cinescrapper.logger import get_logger
 from cinescrapper.wiki_client import WikiClient
+from cinescrapper.cine_model import SourceInfo
 
 logger = get_logger()
 
@@ -100,16 +101,29 @@ def scrape_cinemas(_master_wiki_page: str, _year: int):
                     logger.debug("Currently parsing %d out of %d", idx_cinema + 1, cinemas_len)
                     cinema = cinema_rows[idx_cinema]
                     if cinema.title is not None:
-                        logger.debug(cinema.__dict__)
+                        result = apple_music_client.get_apple_music_album_url(cinema.title, year)
+                        if result is not None:
+                            logger.info("Found Apple Music Album: %s by %s",
+                                        result.get("albumName"),
+                                        result.get("artistName"))
+                            source_info = SourceInfo("Apple Music", result.get("appleMusicUrl"))
+                            cinema.add_source(source_info)
+                        else:
+                            logger.warning("No Apple Music Album found for: %s", cinema.title)
+                        logger.debug("Cinema Node: %s", cinema.to_dict())
+
                         if cinema.ref is not None and len(cinema.ref) > 0:
                             logger.debug("Soundtrack ref link %s ", cinema.ref)
                             # load_sound_track(album)
+
+
                             track_count += 1
-                            if track_count > 100:
+                            if track_count > 10:
                                 break
                         else:
                             # logger.warning("Link not available to get soundtrack info")
                             tc1 = 1
+
                     else:
                         logger.warning("Title is not available for the index %d", idx_cinema)
                     # publish_mongo(album, collection)

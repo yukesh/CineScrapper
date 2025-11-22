@@ -1,2 +1,5 @@
 beautifulsoup4==4.14.0
 Requests==2.32.5
+
+pytest~=8.4.2
+CineScrapper~=0.1.0

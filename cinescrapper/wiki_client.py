@@ -79,6 +79,9 @@ class WikiClient:
             logger.debug("Calling Wiki...")
             content = self.call_wiki(link)
             if content is not None:
+                # Ensure the directory exists
+                os.makedirs(os.path.dirname(_cache_dir), exist_ok=True)
+                logger.info("Caching the response to %s", _file_path)
                 with open(_file_path, "w") as file:
                     file.write(content)
         return content

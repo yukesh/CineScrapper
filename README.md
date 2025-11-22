@@ -91,11 +91,11 @@ python -m cinescrapper --year 2025 --log-level DEBUG
 ```
 ### Arguments
 
-| Argument       | Type    | Default       | Description |
-|----------------|---------|---------------|-------------|
-| `--year`       | int     | current year  | Specify the year to scrape |
-| `--log-level`  | str     | INFO          | Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL |
-| `--help`       |         |               | Show help message and exit |
+| Argument      | Type | Default      | Description                                          |
+|---------------|------|--------------|------------------------------------------------------|
+| `--year`      | int  | current year | Specify the year to scrape                           |
+| `--log-level` | str  | INFO         | Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL |
+| `--help`      |      |              | Show help message and exit                           |
 
 
 ### Example

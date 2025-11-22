@@ -1,108 +1,38 @@
+from dataclasses import dataclass, field, asdict
+from typing import List, Optional
+
+@dataclass
+class SourceInfo:
+    name: str
+    link: Optional[str] = None
+
+
+@dataclass
 class CineInfo:
-    def __init__(self, title=None, year=None, director=None, cast=None, studio=None, composer=None, ref=None):
-        self._title = title
-        self._year = year
-        self._director = director
-        self._cast = cast if isinstance(cast, list) else [cast]
-        self._studio = studio
-        self._composer = composer
-        self._ref = ref
+    title: Optional[str] = None
+    year: Optional[int] = None
+    director: Optional[str] = None
+    cast: List[str] = field(default_factory=list)
+    studio: Optional[str] = None
+    composer: Optional[str] = None
+    ref: Optional[str] = None
+    source: List[SourceInfo] = field(default_factory=list)
 
-    # --- title ---
-    @property
-    def title(self):
-        return self._title
+    def add_cast_member(self, member: str):
+        if member not in self.cast:
+            self.cast.append(member)
 
-    @title.setter
-    def title(self, value):
-        if not value:
-            raise ValueError("Title cannot be empty")
-        self._title = value
+    def remove_cast_member(self, member: str):
+        if member in self.cast:
+            self.cast.remove(member)
 
-    @property
-    def year(self):
-        return self._year
+    def add_source(self, source: SourceInfo):
+        if source not in self.source:
+            self.source.append(source)
 
-    @year.setter
-    def year(self, value):
-        self._year = value
-
-    # --- director ---
-    @property
-    def director(self):
-        return self._director
-
-    @director.setter
-    def director(self, value):
-        self._director = value
-
-    # --- cast ---
-    @property
-    def cast(self):
-        return self._cast
-
-    @cast.setter
-    def cast(self, value):
-        if not isinstance(value, list):
-            raise TypeError("Cast must be a list")
-        self._cast = value
-
-    # --- studio ---
-    @property
-    def studio(self):
-        return self._studio
-
-    @studio.setter
-    def studio(self, value):
-        self._studio = value
-
-    # --- music director ---
-    @property
-    def composer(self):
-        return self._composer
-
-    @composer.setter
-    def composer(self, value):
-        self._composer = value
-
-    # --- ref ---
-    @property
-    def ref(self):
-        return self._ref
-
-    @ref.setter
-    def ref(self, value):
-        self._ref = value
-
-    # --- helper methods ---
-    def add_cast_member(self, member):
-        if member not in self._cast:
-            self._cast.append(member)
-
-    def remove_cast_member(self, member):
-        if member in self._cast:
-            self._cast.remove(member)
+    def to_dict(self):
+        """Serialize to clean dict, including nested SourceInfo objects."""
+        return asdict(self)
 
     def __str__(self):
-        return (
-            f"Album: {self._title},"
-            f"Year: {self._year},"
-            f"Director: {self._director},"
-            f"Cast: {self._cast},"
-            f"Studio: {self._studio},"
-            f"Composer: {self._composer},"
-            f"Ref: {self._ref}"
-        )
-
-    @property
-    def __dict__(self):
-        """Override __dict__ to expose clean keys without '_' prefix"""
-        return {
-            "title": self._title,
-            "year": self._year,
-            "director": self._director,
-            "cast": self._cast,
-            "studio": self._studio,
-            "composer": self._composer,
-            "ref": self._ref,
-        }
+        return f"CineInfo({self.title}, {self.year}, {self.director})"

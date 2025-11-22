@@ -12,8 +12,21 @@ dependencies = [
     "beautifulsoup4"
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest",             # For testing
+    "pytest-cov",         # Optional: for coverage reports
+]
+
 [project.scripts]
 cinescrapper = "cinescrapper.__main__:main"
 
 [tool.setuptools]
 packages = ["cinescrapper"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"
+markers = [
+    "integration: marks tests that perform live API calls (deselect with '-m \"not integration\"')",
+]
