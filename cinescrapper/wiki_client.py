@@ -17,7 +17,7 @@ class WikiClient:
         self._sleep_time = sleep_time
         logger.debug("Initializing the WikiClient and BaseURL is %s", base_url)
 
-    def call_wiki(self, link: str) -> str:
+    def call_wiki(self, link: str) -> str | None:
         """
         Fetch the HTML content of a Wikipedia page.
 
@@ -45,7 +45,7 @@ class WikiClient:
             url = self._base_url + str(link)
             logger.debug("Parsing to %s", url)
         except Exception as exception:
-            logger.warn("Parsing to %s", url)
+            logger.warning("Parsing to %s", url)
             logger.error("Exception while building url " + exception.__str__())
 
         if url is not None:
@@ -56,6 +56,7 @@ class WikiClient:
             except requests.exceptions.RequestException as exception:
                 logger.error("❌ Error fetching HTML from %s: %s", url, exception)
                 return ""  # return empty string or None
+        return None
 
     def fetch(self, link: str, name: str = None, request_type: str = None) -> str:
         """

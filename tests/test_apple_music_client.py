@@ -10,7 +10,7 @@ def test_album_real_call():
     """
     result = get_apple_music_album_url(
         album_name="Star",
-        artist_name="Original Motion Picture Soundtrack",
+        album_type="Original Motion Picture Soundtrack",
         year=2024
     )
     assert result is not None, "No album found from API"

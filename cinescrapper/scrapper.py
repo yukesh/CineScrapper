@@ -1,5 +1,5 @@
 import re
-from cinescrapper import cine_helper, apple_music_client
+from cinescrapper import cine_helper, apple_music_client, cine_constants
 from cinescrapper import cine_parser
 from cinescrapper.logger import get_logger
 from cinescrapper.wiki_client import WikiClient
@@ -72,6 +72,16 @@ def find_cinemas_lesser(_master_wiki_page, _year):
     return find_cinemas(_master_wiki_page, _year, None, "ltr")
 
 
+def load_sound_track(_title: str, _year: int, _ref_link: str):
+    """
+    Load soundtrack information for the given album.
+    """
+    client = WikiClient()
+
+    # Fetch the soup object for the master wiki page
+    soup = client.fetch_soup(_ref_link, _title + "__" + str(_year), cine_constants.TYPE_MOVIE)
+
+
 def scrape_cinemas(_master_wiki_page: str, _year: int):
     """
     Process cinemas for the requested year, parse tables, and log information about movies and their soundtracks.
@@ -98,31 +108,28 @@ def scrape_cinemas(_master_wiki_page: str, _year: int):
                 total_count += cinemas_len
 
                 for idx_cinema in range(cinemas_len):
-                    logger.debug("Currently parsing %d out of %d", idx_cinema + 1, cinemas_len)
                     cinema = cinema_rows[idx_cinema]
+                    logger.debug("Parsing cinema %d out of %d", idx_cinema + 1, cinemas_len)
                     if cinema.title is not None:
                         result = apple_music_client.get_apple_music_album_url(cinema.title, year)
                         if result is not None:
-                            logger.info("Found Apple Music Album: %s by %s",
-                                        result.get("albumName"),
-                                        result.get("artistName"))
+                            logger.debug("Found Apple Music Album: %s by %s", result.get("albumName"), result.get("artistName"))
                             source_info = SourceInfo("Apple Music", result.get("appleMusicUrl"))
                             cinema.add_source(source_info)
                         else:
                             logger.warning("No Apple Music Album found for: %s", cinema.title)
-                        logger.debug("Cinema Node: %s", cinema.to_dict())
+                        logger.info("Cinema Node: %s", cinema.to_dict())
 
                         if cinema.ref is not None and len(cinema.ref) > 0:
                             logger.debug("Soundtrack ref link %s ", cinema.ref)
                             # load_sound_track(album)
-
-
+                            """
                             track_count += 1
-                            if track_count > 10:
+                            if track_count > 100:
                                 break
+                            """
                         else:
-                            # logger.warning("Link not available to get soundtrack info")
-                            tc1 = 1
+                            logger.warning("Link not available to get soundtrack info")
 
                     else:
                         logger.warning("Title is not available for the index %d", idx_cinema)
