@@ -45,7 +45,7 @@ class WikiClient:
             url = self._base_url + str(link)
             logger.debug("Parsing to %s", url)
         except Exception as exception:
-            logger.warn("Parsing to %s", url)
+            logger.warning("Parsing to %s", url)
             logger.error("Exception while building url " + exception.__str__())
 
         if url is not None:

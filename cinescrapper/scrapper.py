@@ -13,7 +13,7 @@ def clean_wiki_link(raw_href):
     Cleans a Wikipedia raw href by removing the redundant '//en.wikipedia.org/' prefix if present.
     """
     if raw_href and isinstance(raw_href, str) and raw_href.startswith("//en.wikipedia.org/"):
-        return raw_href[len("//en.wikipedia.org/"):]
+        return raw_href[len("/en.wikipedia.org/"):]
     return raw_href
 
 
