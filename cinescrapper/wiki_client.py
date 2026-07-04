@@ -70,10 +70,25 @@ class WikiClient:
         name = link if name is None else name
         _file_path = _cache_dir + name + ".html"
         content = ""
+
+        # Check cache file existence and age (7 days expiry)
         if os.path.isfile(_file_path):
-            logger.debug("Found in cache %s", _file_path)
-            with open(_file_path, "r") as file:
-                content = file.read()
+            try:
+                mtime = os.path.getmtime(_file_path)
+                one_week_seconds = 7 * 24 * 60 * 60  # 7 days in seconds
+
+                if time.time() - mtime > one_week_seconds:
+                    logger.info("Cache file expired for %s. Deleting and refetching.", _file_path)
+                    os.remove(_file_path)
+                    content = "" # Force re-fetch
+                else:
+                    logger.debug("Found valid cache in %s", _file_path)
+                    with open(_file_path, "r") as file:
+                        content = file.read()
+            except OSError as e:
+                # Handle cases where the file might be inaccessible or deleted concurrently
+                logger.warning("Could not read/check cache file %s: %s", _file_path, e)
+                content = "" # Force re-fetch
 
         if len(content) < 1:
             logger.debug("Calling Wiki...")
