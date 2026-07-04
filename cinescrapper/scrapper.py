@@ -8,6 +8,15 @@ from cinescrapper.cine_model import SourceInfo
 logger = get_logger()
 
 
+def clean_wiki_link(raw_href):
+    """
+    Cleans a Wikipedia raw href by removing the redundant '//en.wikipedia.org/' prefix if present.
+    """
+    if raw_href and isinstance(raw_href, str) and raw_href.startswith("//en.wikipedia.org/"):
+        return raw_href[len("//en.wikipedia.org/"):]
+    return raw_href
+
+
 def find_cinemas(_master_wiki_page: str, _start_year: int, _end_year: int = None, _condition: str = None):
     """
     Find cinema wiki links based on year and condition.
@@ -36,26 +45,17 @@ def find_cinemas(_master_wiki_page: str, _start_year: int, _end_year: int = None
             if ((_condition == "gtr" and year > _start_year)
                     or (_condition == "ltr" and year < _start_year)):
                 raw_href = a.get("href")
-                if raw_href and isinstance(raw_href, str) and raw_href.startswith("//en.wikipedia.org/"):
-                    href = raw_href[len("//en.wikipedia.org/"):]
-                else:
-                    href = raw_href
+                href = clean_wiki_link(raw_href)
                 cinemas[title] = href
             elif _start_year is not None and _end_year is not None:
                 if _start_year < year < _end_year:
                     raw_href = a.get("href")
-                    if raw_href and isinstance(raw_href, str) and raw_href.startswith("//en.wikipedia.org/"):
-                        href = raw_href[len("//en.wikipedia.org/"):]
-                    else:
-                        href = raw_href
+                    href = clean_wiki_link(raw_href)
                     cinemas[title] = href
             elif _condition is None:
                 if year == _start_year:
                     raw_href = a.get("href")
-                    if raw_href and isinstance(raw_href, str) and raw_href.startswith("//en.wikipedia.org/"):
-                        href = raw_href[len("//en.wikipedia.org/"):]
-                    else:
-                        href = raw_href
+                    href = clean_wiki_link(raw_href)
                     cinemas[title] = href
                     break
     else:
