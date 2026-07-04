@@ -35,15 +35,27 @@ def find_cinemas(_master_wiki_page: str, _start_year: int, _end_year: int = None
             # Filter based on the provided condition
             if ((_condition == "gtr" and year > _start_year)
                     or (_condition == "ltr" and year < _start_year)):
-                href = a.get("href")
+                raw_href = a.get("href")
+                if raw_href and isinstance(raw_href, str) and raw_href.startswith("//en.wikipedia.org/"):
+                    href = raw_href[len("//en.wikipedia.org/"):]
+                else:
+                    href = raw_href
                 cinemas[title] = href
             elif _start_year is not None and _end_year is not None:
                 if _start_year < year < _end_year:
-                    href = a.get("href")
+                    raw_href = a.get("href")
+                    if raw_href and isinstance(raw_href, str) and raw_href.startswith("//en.wikipedia.org/"):
+                        href = raw_href[len("//en.wikipedia.org/"):]
+                    else:
+                        href = raw_href
                     cinemas[title] = href
             elif _condition is None:
                 if year == _start_year:
-                    href = a.get("href")
+                    raw_href = a.get("href")
+                    if raw_href and isinstance(raw_href, str) and raw_href.startswith("//en.wikipedia.org/"):
+                        href = raw_href[len("//en.wikipedia.org/"):]
+                    else:
+                        href = raw_href
                     cinemas[title] = href
                     break
     else:
