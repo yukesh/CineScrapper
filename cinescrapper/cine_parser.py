@@ -1,7 +1,8 @@
 import re
+from bs4 import BeautifulSoup
 from cinescrapper import cine_helper
 from cinescrapper.logger import get_logger
-from cinescrapper.cine_model import CineInfo, TrackInfo # Import TrackInfo
+from cinescrapper.cine_model import CineInfo, SoundtrackInfo, TrackInfo
 
 logger = get_logger()
 
@@ -69,24 +70,95 @@ def map_cinema(_cinema, _header, _value):
             _cinema.studio = _value
 
 
-def parse_soundtrack_section(section_soup: BeautifulSoup, cine_info: CineInfo):
+def _clean_text(element):
+    if element is None:
+        return None
+    text = element.get_text(" ", strip=True)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = text.strip('"')
+    return text or None
+
+
+def _normalise_header(header):
+    return re.sub(r"[^a-z0-9]+", "", header.lower())
+
+
+def _parse_track_number(value):
+    if not value:
+        return None
+    match = re.search(r"\d+", value)
+    return int(match.group()) if match else None
+
+
+def _parse_album_infobox(soup: BeautifulSoup, soundtrack: SoundtrackInfo):
+    for table in soup.find_all("table", {"class": "infobox"}):
+        table_text = table.get_text(" ", strip=True)
+        is_album_infobox = "Soundtrack album" in table_text or "haudio" in table.get("class", [])
+        if not is_album_infobox:
+            continue
+
+        album = table.select_one(".summary.album")
+        contributor = table.select_one(".contributor")
+        description = table.select_one(".description")
+
+        if album and not soundtrack.album_name:
+            soundtrack.album_name = _clean_text(album)
+        if contributor and not soundtrack.composer:
+            soundtrack.composer = _clean_text(contributor)
+        elif description and not soundtrack.composer:
+            match = re.search(r"Soundtrack album\s+by\s+(.+)", _clean_text(description) or "", re.I)
+            if match:
+                soundtrack.composer = match.group(1).strip()
+
+
+def _parse_film_infobox_music(soup: BeautifulSoup, soundtrack: SoundtrackInfo):
+    if soundtrack.composer:
+        return
+    for row in soup.select("table.infobox tr"):
+        label = row.find("th", {"class": "infobox-label"})
+        data = row.find("td", {"class": "infobox-data"})
+        if label and data and _clean_text(label) == "Music by":
+            soundtrack.composer = _clean_text(data)
+            return
+
+
+def _soundtrack_sections(soup: BeautifulSoup):
+    sections = []
+    for section in soup.find_all("section"):
+        heading = section.get("aria-labelledby") or ""
+        if heading.lower() in {"music", "soundtrack"}:
+            sections.append(section)
+    return sections
+
+
+def parse_soundtrack_section(section_soup: BeautifulSoup, cine_info: CineInfo = None):
     """
     Parses soundtrack information from a dedicated section (e.g., 'Soundtrack').
-    Updates the provided CineInfo object with extracted details.
+    Optionally updates the provided CineInfo object with extracted details.
     """
-    # Look for common phrases indicating composer and album/soundtrack info
-    composer_match = re.search(r'(?:composed by|score is composed by)\s+(.*?)(?:\s+and|\.|$)', section_soup.get_text())
-    album_match = re.search(r'the soundtrack.*?(?:is featured in|for)\s+([A-Za-z0-9\s]+)', section_soup.get_text(), re.IGNORECASE)
+    soundtrack = SoundtrackInfo()
+    _parse_album_infobox(section_soup, soundtrack)
 
-    if composer_match:
-        composer = composer_match.group(1).strip()
-        cine_info.composer = composer
-        logger.debug("Extracted Composer from soundtrack section: %s", composer)
+    section_text = section_soup.get_text(" ", strip=True)
+    composer_match = re.search(
+        r"(?:soundtrack(?: and film score)? is composed by|score is composed by|composed by)\s+(.*?)(?:\.|, marking|,|$)",
+        section_text,
+        re.I,
+    )
+    album_match = re.search(r"the soundtrack.*?(?:is featured in|for)\s+([A-Za-z0-9\s]+)", section_text, re.I)
 
+    if composer_match and not soundtrack.composer:
+        soundtrack.composer = composer_match.group(1).strip()
     if album_match:
-        album = album_match.group(1).strip()
-        cine_info.album_name = album
-        logger.debug("Extracted Album Name from soundtrack section: %s", album)
+        soundtrack.album_name = album_match.group(1).strip()
+
+    for track_table in section_soup.find_all("table", {"class": "tracklist"}):
+        for track in parse_tracklist(track_table):
+            soundtrack.add_track(track)
+
+    if cine_info is not None:
+        cine_info.apply_soundtrack(soundtrack)
+    return soundtrack
 
 
 def parse_tracklist(table):
@@ -102,46 +174,83 @@ def parse_tracklist(table):
         return tracks
 
     rows = tbody.find_all("tr")
+    header_map = {}
     for row in rows:
+        header_cells = row.find_all("th", scope="col")
+        if header_cells:
+            for idx, cell in enumerate(header_cells):
+                header = _normalise_header(_clean_text(cell) or "")
+                header_map[header] = idx
+            continue
+
         # Skip header and total length rows
-        if "tracklist-total-length" in row.get("class", "") or "caption" in row.get("class", ""):
+        if "tracklist-total-length" in row.get("class", []) or "caption" in row.get("class", []):
             continue
 
         cols = row.find_all(['th', 'td'])
-        if len(cols) < 5:
+        if len(cols) < 2:
             logger.warning("Skipping incomplete tracklist row.")
             continue
 
-        # Extract data based on expected column order (No, Title, Lyrics, Singer(s), Length)
         try:
             track_info = TrackInfo()
-            
-            # Column 1: Number (th scope="row")
-            number = cols[0].get_text(strip=True)
-            if number and number.isdigit():
-                pass # We don't store the number, but we check if it's a valid row start
 
-            # Column 2: Title
-            title_element = cols[1]
-            track_info.title = title_element.get_text(strip=True)
+            track_info.number = _parse_track_number(_clean_text(cols[0]))
+            track_info.title = _clean_text(cols[header_map.get("title", 1)])
 
-            # Column 3: Lyrics
-            lyrics_element = cols[2]
-            track_info.lyrics = lyrics_element.get_text(strip=True)
+            lyrics_idx = header_map.get("lyrics")
+            singers_idx = header_map.get("singers") or header_map.get("artist") or header_map.get("singer")
+            length_idx = header_map.get("length")
 
-            # Column 4: Singer(s)
-            singers_element = cols[3]
-            track_info.singers = singers_element.get_text(strip=True)
-
-            # Column 5: Length
-            length_element = cols[4]
-            track_info.length = length_element.get_text(strip=True)
+            if lyrics_idx is not None and lyrics_idx < len(cols):
+                track_info.lyrics = _clean_text(cols[lyrics_idx])
+            if singers_idx is not None and singers_idx < len(cols):
+                track_info.singers = _clean_text(cols[singers_idx])
+            if length_idx is not None and length_idx < len(cols):
+                track_info.length = _clean_text(cols[length_idx])
 
             tracks.append(track_info)
         except Exception as e:
             logger.error("Error parsing tracklist row: %s", e)
             continue
     return tracks
+
+
+def parse_soundtrack_page(soup: BeautifulSoup, cine_info: CineInfo = None):
+    """
+    Converts a movie page or a dedicated soundtrack page into SoundtrackInfo.
+    """
+    soundtrack = SoundtrackInfo()
+    _parse_album_infobox(soup, soundtrack)
+    _parse_film_infobox_music(soup, soundtrack)
+
+    sections = _soundtrack_sections(soup)
+    parse_roots = sections if sections else [soup]
+    for root in parse_roots:
+        section_soundtrack = parse_soundtrack_section(root)
+        if section_soundtrack.album_name and not soundtrack.album_name:
+            soundtrack.album_name = section_soundtrack.album_name
+        if section_soundtrack.composer and not soundtrack.composer:
+            soundtrack.composer = section_soundtrack.composer
+        for track in section_soundtrack.tracks:
+            soundtrack.add_track(track)
+
+    if cine_info is not None:
+        cine_info.apply_soundtrack(soundtrack)
+    return soundtrack
+
+
+def find_soundtrack_page_link(soup: BeautifulSoup):
+    """
+    Finds a dedicated soundtrack page linked from a movie page, usually through
+    a 'Main article: <film> (soundtrack)' hatnote in the Music/Soundtrack section.
+    """
+    for section in _soundtrack_sections(soup):
+        for link in section.select(".hatnote a[href]"):
+            title = link.get("title") or link.get_text(" ", strip=True)
+            if "(soundtrack)" in title.lower():
+                return clean_wiki_link(link.get("href"))
+    return None
 
 
 def parse_table(_table, _year):
