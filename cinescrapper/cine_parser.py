@@ -1,8 +1,7 @@
 import re
-
 from cinescrapper import cine_helper
 from cinescrapper.logger import get_logger
-from cinescrapper.cine_model import CineInfo
+from cinescrapper.cine_model import CineInfo, TrackInfo # Import TrackInfo
 
 logger = get_logger()
 
@@ -68,6 +67,81 @@ def map_cinema(_cinema, _header, _value):
             _cinema.studio = _value
         case "Producer":
             _cinema.studio = _value
+
+
+def parse_soundtrack_section(section_soup: BeautifulSoup, cine_info: CineInfo):
+    """
+    Parses soundtrack information from a dedicated section (e.g., 'Soundtrack').
+    Updates the provided CineInfo object with extracted details.
+    """
+    # Look for common phrases indicating composer and album/soundtrack info
+    composer_match = re.search(r'(?:composed by|score is composed by)\s+(.*?)(?:\s+and|\.|$)', section_soup.get_text())
+    album_match = re.search(r'the soundtrack.*?(?:is featured in|for)\s+([A-Za-z0-9\s]+)', section_soup.get_text(), re.IGNORECASE)
+
+    if composer_match:
+        composer = composer_match.group(1).strip()
+        cine_info.composer = composer
+        logger.debug("Extracted Composer from soundtrack section: %s", composer)
+
+    if album_match:
+        album = album_match.group(1).strip()
+        cine_info.album_name = album
+        logger.debug("Extracted Album Name from soundtrack section: %s", album)
+
+
+def parse_tracklist(table):
+    """
+    Parses a Wikipedia track listing table (class 'tracklist') and extracts TrackInfo objects.
+    Assumes the structure: No | Title | Lyrics | Singer(s) | Length
+    Returns a list of TrackInfo objects.
+    """
+    tracks = []
+    tbody = table.find("tbody")
+    if not tbody:
+        logger.warning("Tracklist table found but no <tbody> tag.")
+        return tracks
+
+    rows = tbody.find_all("tr")
+    for row in rows:
+        # Skip header and total length rows
+        if "tracklist-total-length" in row.get("class", "") or "caption" in row.get("class", ""):
+            continue
+
+        cols = row.find_all(['th', 'td'])
+        if len(cols) < 5:
+            logger.warning("Skipping incomplete tracklist row.")
+            continue
+
+        # Extract data based on expected column order (No, Title, Lyrics, Singer(s), Length)
+        try:
+            track_info = TrackInfo()
+            
+            # Column 1: Number (th scope="row")
+            number = cols[0].get_text(strip=True)
+            if number and number.isdigit():
+                pass # We don't store the number, but we check if it's a valid row start
+
+            # Column 2: Title
+            title_element = cols[1]
+            track_info.title = title_element.get_text(strip=True)
+
+            # Column 3: Lyrics
+            lyrics_element = cols[2]
+            track_info.lyrics = lyrics_element.get_text(strip=True)
+
+            # Column 4: Singer(s)
+            singers_element = cols[3]
+            track_info.singers = singers_element.get_text(strip=True)
+
+            # Column 5: Length
+            length_element = cols[4]
+            track_info.length = length_element.get_text(strip=True)
+
+            tracks.append(track_info)
+        except Exception as e:
+            logger.error("Error parsing tracklist row: %s", e)
+            continue
+    return tracks
 
 
 def parse_table(_table, _year):

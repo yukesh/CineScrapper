@@ -123,6 +123,20 @@ def scrape_cinemas(_master_wiki_page: str, _year: int):
                     logger.debug("Currently parsing %d out of %d", idx_cinema + 1, cinemas_len)
                     cinema = cinema_rows[idx_cinema]
                     if cinema.title is not None:
+                        # --- Soundtrack Parsing (Inline Content) ---
+                        # Find all sections that might contain soundtrack info
+                        sections = soup.find_all("section", {"data-mw-section-id": "3"}) # Targeting section ID 3 as per example
+                        for section in sections:
+                            cine_parser.parse_soundtrack_section(section, cinema)
+
+                        # --- Tracklist Parsing (Structured Table Content) ---
+                        tracklist_tables = soup.find_all("table", {"class": "tracklist"})
+                        for track_table in tracklist_tables:
+                            tracks = cine_parser.parse_tracklist(track_table)
+                            for track in tracks:
+                                cinema.add_track(track)
+
+                        # --- Apple Music Lookup ---
                         result = apple_music_client.get_apple_music_album_url(cinema.title, year)
                         if result is not None:
                             logger.info("Found Apple Music Album: %s by %s",
@@ -134,6 +148,7 @@ def scrape_cinemas(_master_wiki_page: str, _year: int):
                             logger.warning("No Apple Music Album found for: %s", cinema.title)
                         logger.debug("Cinema Node: %s", cinema.to_dict())
 
+                        # --- Soundtrack Link Processing (Separate Page) ---
                         if cinema.ref is not None and len(cinema.ref) > 0:
                             cinema_ref_link = cinema.ref
                             logger.debug("Cinema Ref Linke %s ", cinema_ref_link)
