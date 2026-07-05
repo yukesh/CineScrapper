@@ -1,6 +1,7 @@
 import re
 from cinescrapper import cine_helper, apple_music_client
 from cinescrapper import cine_parser
+from cinescrapper import cine_constants
 from cinescrapper.logger import get_logger
 from cinescrapper.wiki_client import WikiClient
 from cinescrapper.cine_model import SourceInfo
@@ -14,6 +15,15 @@ def clean_wiki_link(raw_href):
     """
     if raw_href and isinstance(raw_href, str) and raw_href.startswith("//en.wikipedia.org/"):
         return raw_href[len("/en.wikipedia.org/"):]
+    return raw_href
+
+
+def get_soundtrack_page_name(raw_href):
+    """
+    Cleans a Wikipedia raw href by removing the redundant '/wiki/' prefix if present.
+    """
+    if raw_href and isinstance(raw_href, str) and raw_href.startswith("/wiki/"):
+        return raw_href[len("/wiki/"):]
     return raw_href
 
 
@@ -125,7 +135,9 @@ def scrape_cinemas(_master_wiki_page: str, _year: int):
                         logger.debug("Cinema Node: %s", cinema.to_dict())
 
                         if cinema.ref is not None and len(cinema.ref) > 0:
-                            logger.debug("Soundtrack ref link %s ", cinema.ref)
+                            cinema_ref_link = cinema.ref
+                            logger.debug("Cinema Ref Linke %s ", cinema_ref_link)
+                            soup = client.fetch_soup(cinema.ref, get_soundtrack_page_name(cinema.ref), cine_constants.TYPE_MOVIE)
                             # load_sound_track(album)
 
 

@@ -40,6 +40,14 @@ def sum_dict_field_values(_dict: dict, _key: str):
             break
     return total - 1
 
+def clean_wiki_link(raw_href):
+    """
+    Cleans a Wikipedia raw href by removing the redundant '//en.wikipedia.org/' prefix if present.
+    """
+    if raw_href and isinstance(raw_href, str) and raw_href.startswith("//en.wikipedia.org/"):
+        return raw_href[len("/en.wikipedia.org/"):]
+    return raw_href
+
 
 def map_cinema(_cinema, _header, _value):
     match _header:
@@ -47,7 +55,7 @@ def map_cinema(_cinema, _header, _value):
             val_arr = _value.split("****") if _value else [_value]
             if len(val_arr) > 1:
                 _cinema.title = val_arr[0]
-                _cinema.ref = val_arr[1]
+                _cinema.ref = clean_wiki_link(val_arr[1])
             else:
                 _cinema.title = _value
         case "Director":
