@@ -94,7 +94,7 @@ def find_cinemas_lesser(_master_wiki_page, _year):
     return find_cinemas(_master_wiki_page, _year, None, "ltr")
 
 
-def scrape_cinemas(_master_wiki_page: str, _year: int):
+def scrape_cinemas(_master_wiki_page: str, _year: int, mongo_writer=None):
     """
     Process cinemas for the requested year, parse tables, and log information about movies and their soundtracks.
     """
@@ -120,7 +120,7 @@ def scrape_cinemas(_master_wiki_page: str, _year: int):
                 total_count += cinemas_len
 
                 for idx_cinema in range(cinemas_len):
-                    logger.debug("Currently parsing %d out of %d", idx_cinema + 1, cinemas_len)
+                    logger.info("Currently parsing %d out of %d", idx_cinema + 1, cinemas_len)
                     cinema = cinema_rows[idx_cinema]
                     if cinema.title is not None:
                         movie_soup = None
@@ -156,17 +156,9 @@ def scrape_cinemas(_master_wiki_page: str, _year: int):
                         else:
                             logger.warning("No Apple Music Album found for: %s", cinema.title)
                         logger.debug("Cinema Node: %s", cinema.to_dict())
-
-                        if movie_soup is not None:
-                            track_count += 1
-                            if track_count > 10:
-                                break
-                        else:
-                            # logger.warning("Link not available to get soundtrack info")
-                            tc1 = 1
-
+                        if mongo_writer is not None:
+                            mongo_writer.upsert_cinema(cinema)
                     else:
                         logger.warning("Title is not available for the index %d", idx_cinema)
-                    # publish_mongo(album, collection)
         logger.info("Total # Cinemas are %d", total_count)
         logger.info("Total # Cinemas with Soundtrack links are %d", track_count)

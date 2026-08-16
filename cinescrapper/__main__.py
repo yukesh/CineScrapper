@@ -1,6 +1,7 @@
 from datetime import date
 
 from cinescrapper import __version__
+from cinescrapper.mongo_writer import create_mongo_writer
 from cinescrapper.scrapper import scrape_cinemas
 from cinescrapper.logger import setup_logger, get_logger
 import argparse
@@ -29,6 +30,33 @@ def main():
         help='Year of the films to scrape (default: current year)'
     )
 
+    parser.add_argument(
+        "--mongo-enabled",
+        action="store_true",
+        help="Write scraped cinema data to MongoDB"
+    )
+
+    parser.add_argument(
+        "--mongo-uri",
+        type=str,
+        default="mongodb://localhost:27017",
+        help="MongoDB connection string"
+    )
+
+    parser.add_argument(
+        "--mongo-db",
+        type=str,
+        default="cinescrapper",
+        help="MongoDB database name"
+    )
+
+    parser.add_argument(
+        "--mongo-collection",
+        type=str,
+        default="cinemas",
+        help="MongoDB collection name"
+    )
+
     args = parser.parse_args()
 
     setup_logger(args.log_level)
@@ -38,9 +66,20 @@ def main():
     logger.info("Starting CineScrapper...")
     logger.info(f"Arguments: {args}")
 
-    # Entry point for processing cinemas
-    scrape_cinemas(args.wiki_source, args.year)
-    logger.info("Ending CineScrapper...")
+    mongo_writer = create_mongo_writer(
+        args.mongo_enabled,
+        args.mongo_uri,
+        args.mongo_db,
+        args.mongo_collection,
+    )
+    try:
+        # Entry point for processing cinemas
+        scrape_cinemas(args.wiki_source, args.year, mongo_writer)
+    finally:
+        if mongo_writer is not None:
+            mongo_writer.close()
+        logger.info("Ending CineScrapper...")
 
 
-main()
+if __name__ == "__main__":
+    main()

@@ -104,6 +104,34 @@ python -m cinescrapper --year 2025 --log-level DEBUG
 python -m cinescrapper --year 2025 --log-level INFO
 ```
 
+## 🐳 Docker + MongoDB
+
+Start a local MongoDB container:
+
+```bash
+docker compose up -d mongo
+```
+
+Run the scraper from Docker and upsert results into MongoDB:
+
+```bash
+YEAR=2026 docker compose --profile scraper run --rm scraper
+```
+
+By default, Compose stores data in the `mongo_data` volume and writes scraper cache files to `./site_cache`.
+
+You can override the local Mongo settings:
+
+```bash
+MONGO_PORT=27018 MONGO_DB=cinescrapper MONGO_COLLECTION=cinemas docker compose up -d mongo
+```
+
+Run locally against the Docker MongoDB instance:
+
+```bash
+python -m cinescrapper --year 2026 --mongo-enabled --mongo-uri "mongodb://localhost:27017" --mongo-db cinescrapper --mongo-collection cinemas
+```
+
 ## 🛠️ Project Structure
 
 ```
@@ -136,7 +164,6 @@ cinescrapper --year 2025
 ```bash
 rm -rf site_cache/*
 ```
-
 
 
 

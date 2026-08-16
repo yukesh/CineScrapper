@@ -1,11 +1,12 @@
 import os
 import time
 
+import random
 import requests
+from bs4 import BeautifulSoup
 
 from cinescrapper import cine_helper
 from cinescrapper.logger import get_logger
-from bs4 import BeautifulSoup
 
 logger = get_logger()
 
@@ -15,6 +16,7 @@ class WikiClient:
     def __init__(self, base_url="https://en.wikipedia.org", sleep_time=None):
         self._base_url = base_url
         self._sleep_time = sleep_time
+        self._session = requests.Session()
         logger.debug("Initializing the WikiClient and BaseURL is %s", base_url)
 
     def call_wiki(self, link: str) -> str:
@@ -33,7 +35,8 @@ class WikiClient:
                  logs error and returns an empty string instead of propagating.
         """
         if self._sleep_time is not None:
-            time.sleep(self._sleep_time)
+            wait = self._sleep_time + random.uniform(0.2, 0.8)
+            time.sleep(wait)
             logger.debug("Waiting for %d seconds to perform the lookup")
 
         headers = {
@@ -50,7 +53,7 @@ class WikiClient:
 
         if url is not None:
             try:
-                response = requests.get(url, headers=headers, timeout=10)
+                response = self._session.get(url, headers=headers, timeout=10)
                 response.raise_for_status()  # raises HTTPError for 4xx/5xx
                 return response.text
             except requests.exceptions.RequestException as exception:
@@ -68,7 +71,9 @@ class WikiClient:
         """
         _cache_dir = cine_helper.fetch_cache_dir(request_type)
         name = link if name is None else name
-        _file_path = _cache_dir + name + ".html"
+        # Clean the name by replacing '/' with '_'
+        safe_name = name.replace("/", "_")
+        _file_path = _cache_dir + safe_name + ".html"
         content = ""
 
         # Check cache file existence and age (7 days expiry)
@@ -83,7 +88,7 @@ class WikiClient:
                     content = "" # Force re-fetch
                 else:
                     logger.debug("Found valid cache in %s", _file_path)
-                    with open(_file_path, "r") as file:
+                    with open(_file_path, "r", encoding="utf-8") as file:
                         content = file.read()
             except OSError as e:
                 # Handle cases where the file might be inaccessible or deleted concurrently
@@ -97,8 +102,12 @@ class WikiClient:
                 # Ensure the directory exists
                 os.makedirs(os.path.dirname(_cache_dir), exist_ok=True)
                 logger.info("Caching the response to %s", _file_path)
-                with open(_file_path, "w") as file:
-                    file.write(content)
+                try:
+                    with open(_file_path, "w", encoding="utf-8") as file:
+                        file.write(content)
+                except OSError as e:
+                    # Handle cases where the file might be inaccessible or deleted concurrently
+                    logger.warning("Could not write cache file %s: %s", _file_path, e)
         return content
 
     def fetch_soup(self, link: str, name: str = None, request_type: str = None) -> BeautifulSoup | None:
