@@ -15,8 +15,7 @@ services:
 
   scraper:
     build: .
-    profiles:
-      - scraper
+    profiles: ["scraper"]
     depends_on:
       mongo:
         condition: service_healthy
@@ -25,6 +24,16 @@ services:
       - "${YEAR:-2026}"
       - "--log-level"
       - "${LOG_LEVEL:-INFO}"
+      - "--batch-size"
+      - "${BATCH_SIZE:-10}"
+      - "--wiki-rate-limit"
+      - "${WIKI_RATE_LIMIT:-1.5}"
+      - "--apple-music-rate-limit"
+      - "${APPLE_MUSIC_RATE_LIMIT:-2.0}"
+      - "--rate-limit-jitter"
+      - "${RATE_LIMIT_JITTER:-0.25}"
+      - "--max-retries"
+      - "${MAX_RETRIES:-3}"
       - "--mongo-enabled"
       - "--mongo-uri"
       - "mongodb://mongo:27017"
