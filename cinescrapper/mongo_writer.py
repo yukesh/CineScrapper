@@ -37,6 +37,14 @@ class MongoCinemaWriter:
         logger.debug("MongoDB upsert result for %s: %s", cinema.title, result.raw_result)
         return result
 
+    def ping(self):
+        """Verify connectivity and authentication with MongoDB."""
+        if self._client is None:
+            # An injected collection is used, for example, in unit tests.
+            return
+
+        self._client.admin.command("ping")
+
     def close(self):
         if self._client is not None:
             self._client.close()

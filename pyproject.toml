@@ -10,7 +10,8 @@ requires-python = ">=3.12"
 dependencies = [
     "requests",
     "beautifulsoup4",
-    "pymongo"
+    "pymongo",
+    "python-dotenv"
 ]
 
 [project.optional-dependencies]
