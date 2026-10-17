@@ -15,6 +15,9 @@ class BatchStats:
     total: int = 0
     skipped: int = 0
     processed: int = 0
+    inserted: int = 0
+    updated: int = 0
+    unchanged: int = 0
     failed: int = 0
 
 
@@ -28,12 +31,13 @@ def chunks(items, size):
 
 
 class BatchProcessor:
-    def __init__(self, movie_processor, mongo_writer=None, job_store=None, batch_size=10, force=False):
+    def __init__(self, movie_processor, mongo_writer=None, job_store=None, batch_size=10, force=False, resume=False):
         self.movie_processor = movie_processor
         self.mongo_writer = mongo_writer
         self.job_store = job_store
         self.batch_size = batch_size
         self.force = force
+        self.resume = resume
 
     def process(self, movies, job_id, year):
         stats = BatchStats(total=len(movies))
@@ -44,23 +48,34 @@ class BatchProcessor:
             logger.info("Starting batch %d (%d movies)", batch_number, len(batch))
             for cinema in batch:
                 item_id = item_id_for(cinema)
-                if self.job_store and not self.force and self.job_store.is_completed(job_id, item_id):
+                if self.job_store and self.resume and not self.force and self.job_store.is_completed(job_id, item_id):
                     stats.skipped += 1
                     logger.info("Skipping completed movie: %s", cinema.title)
                     continue
                 try:
                     processed = self.movie_processor.process(cinema)
+                    outcome = None
                     if self.mongo_writer:
-                        self.mongo_writer.upsert_cinema(processed)
+                        if hasattr(self.mongo_writer, "save_cinema"):
+                            outcome = self.mongo_writer.save_cinema(processed)
+                        else:
+                            self.mongo_writer.upsert_cinema(processed)
+                            outcome = "updated"
                     if self.job_store:
                         self.job_store.mark_completed(job_id, item_id)
                     stats.processed += 1
+                    if outcome in {"inserted", "updated", "unchanged"}:
+                        setattr(stats, outcome, getattr(stats, outcome) + 1)
                 except Exception as exc:
                     stats.failed += 1
                     logger.exception("Movie failed: %s", cinema.title)
                     if self.job_store:
                         self.job_store.mark_failed(job_id, item_id, exc)
-            logger.info("Completed batch %d; processed=%d skipped=%d failed=%d", batch_number, stats.processed, stats.skipped, stats.failed)
+            logger.info(
+                "Completed batch %d; processed=%d inserted=%d updated=%d unchanged=%d skipped=%d failed=%d",
+                batch_number, stats.processed, stats.inserted, stats.updated,
+                stats.unchanged, stats.skipped, stats.failed,
+            )
 
         status = "COMPLETED" if stats.failed == 0 else "COMPLETED_WITH_ERRORS"
         if self.job_store:

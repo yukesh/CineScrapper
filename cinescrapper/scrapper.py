@@ -23,8 +23,8 @@ def clean_wiki_link(raw_href):
     return raw_href
 
 
-def find_cinemas(_master_wiki_page: str, _start_year: int, _end_year: int = None, _condition: str = None):
-    client = WikiClient()
+def find_cinemas(_master_wiki_page: str, _start_year: int, _end_year: int = None, _condition: str = None, wiki_client: WikiClient | None = None):
+    client = wiki_client or WikiClient()
     soup = client.fetch_soup("/wiki/" + _master_wiki_page, _master_wiki_page)
     div_tag = soup.find("div", {"id": "mw-content-text"}) if soup is not None else None
     cinemas = {}
@@ -46,8 +46,8 @@ def find_cinemas(_master_wiki_page: str, _start_year: int, _end_year: int = None
     return cinemas
 
 
-def find_cinema(_master_wiki_page, _year):
-    return find_cinemas(_master_wiki_page, _year)
+def find_cinema(_master_wiki_page, _year, wiki_client: WikiClient | None = None):
+    return find_cinemas(_master_wiki_page, _year, wiki_client=wiki_client)
 
 
 def find_cinemas_greater(_master_wiki_page, _year):
@@ -60,7 +60,7 @@ def find_cinemas_lesser(_master_wiki_page, _year):
 
 def discover_movies(master_wiki_page: str, year: int, wiki_client: WikiClient | None = None) -> list[CineInfo]:
     """Discover and parse all movie rows without doing per-movie enrichment."""
-    cinemas = find_cinema(master_wiki_page, year)
+    cinemas = find_cinema(master_wiki_page, year, wiki_client)
     if not cinemas:
         return []
     client = wiki_client or WikiClient()
@@ -77,10 +77,16 @@ def discover_movies(master_wiki_page: str, year: int, wiki_client: WikiClient | 
     return movies
 
 
-def scrape_cinemas(_master_wiki_page: str, _year: int, mongo_writer=None, config=None):
+def scrape_cinemas(_master_wiki_page: str, _year: int, mongo_writer=None, config=None, end_year: int | None = None):
+    """Scrape one year or an inclusive range of years in ascending order."""
     from cinescrapper.config import ScraperConfig
     config = config or ScraperConfig.from_env()
     config.validate()
+
+    if end_year is not None and _year > end_year:
+        raise ValueError("start year must be less than or equal to end year")
+    years = range(_year, (end_year if end_year is not None else _year) + 1)
+    results = {}
 
     wiki_limiter = RateLimiter(config.wiki_rate_limit, config.rate_limit_jitter)
     apple_limiter = RateLimiter(config.apple_music_rate_limit, config.rate_limit_jitter)
@@ -91,20 +97,40 @@ def scrape_cinemas(_master_wiki_page: str, _year: int, mongo_writer=None, config
         cache_ttl_seconds=config.cache_ttl_seconds,
     )
     apple_client = AppleMusicClient(apple_limiter, config.max_retries, config.request_timeout)
-
-    movies = discover_movies(_master_wiki_page, _year, wiki_client)
-    if not movies:
-        logger.warning("No movies discovered for year %s", _year)
-        return None
-
-    job_store = MongoJobStore(mongo_writer._collection) if mongo_writer is not None else None
     processor = MovieProcessor(wiki_client, apple_client)
-    batch_processor = BatchProcessor(
-        processor,
-        mongo_writer=mongo_writer,
-        job_store=job_store,
-        batch_size=config.batch_size,
-        force=config.force,
-    )
-    job_id = f"{_master_wiki_page}:{_year}:v0.2.0"
-    return batch_processor.process(movies, job_id, _year)
+
+    for year in years:
+        logger.info("Starting scrape for year %d", year)
+        movies = discover_movies(_master_wiki_page, year, wiki_client)
+        if not movies:
+            logger.warning("No movies discovered for year %s", year)
+            results[year] = None
+            continue
+
+        job_store = MongoJobStore(mongo_writer._collection) if mongo_writer is not None else None
+        batch_processor = BatchProcessor(
+            processor,
+            mongo_writer=mongo_writer,
+            job_store=job_store,
+            batch_size=config.batch_size,
+            force=config.force,
+            resume=config.resume,
+        )
+        job_id = f"{_master_wiki_page}:{year}:v0.2.0"
+        try:
+            results[year] = batch_processor.process(movies, job_id, year)
+        except Exception:
+            if end_year is None:
+                raise
+            logger.exception("Scraping year %d failed; continuing with subsequent years", year)
+            results[year] = None
+
+    completed_stats = [value for value in results.values() if value is not None]
+    if completed_stats:
+        totals = {
+            key: sum(getattr(value, key, 0) for value in completed_stats)
+            for key in ("total", "processed", "inserted", "updated", "unchanged", "skipped", "failed")
+        }
+        logger.info("Year-range totals: %s", totals)
+    logger.info("Year-range scrape finished: %d year(s) attempted", len(results))
+    return results[_year] if end_year is None else results

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import time
+from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
@@ -26,8 +27,7 @@ class WikiClient:
         self._session = requests.Session()
 
     def call_wiki(self, link: str) -> str:
-        parsed_link = str(link).replace("https://en.wikipedia.org","")
-        url = self._base_url + parsed_link
+        url = urljoin(self._base_url.rstrip("/") + "/", str(link))
         headers = {"User-Agent": "CineScrapper/0.2.0"}
 
         def operation():
@@ -49,7 +49,7 @@ class WikiClient:
     def fetch(self, link: str, name: str = None, request_type: str = None) -> str:
         cache_dir = cine_helper.fetch_cache_dir(request_type)
         name = link if name is None else name
-        safe_name = name.replace("/", "_")
+        safe_name = str(name).replace("/", "_").replace("\\", "_")
         file_path = os.path.join(cache_dir, safe_name + ".html")
 
         if os.path.isfile(file_path):

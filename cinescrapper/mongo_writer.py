@@ -1,4 +1,5 @@
 from typing import Optional
+from urllib.parse import parse_qs, urlparse
 
 from cinescrapper.cine_model import CineInfo
 from cinescrapper.logger import get_logger
@@ -23,6 +24,19 @@ class MongoCinemaWriter:
             from pymongo import MongoClient
         except ImportError as exception:
             raise RuntimeError("MongoDB support requires pymongo.") from exception
+        parsed = urlparse(connection_string)
+        options = parse_qs(parsed.query)
+        tls_enabled = parsed.scheme == "mongodb+srv" or any(
+            value.lower() in {"true", "1", "yes"}
+            for key in ("tls", "ssl")
+            for value in options.get(key, [])
+        )
+        if tls_enabled:
+            try:
+                import certifi
+            except ImportError as exception:
+                raise RuntimeError("TLS MongoDB connections require certifi for CA certificates.") from exception
+            return MongoClient(connection_string, tlsCAFile=certifi.where())
         return MongoClient(connection_string)
 
     @staticmethod
@@ -31,19 +45,38 @@ class MongoCinemaWriter:
             return {"ref": cinema.ref}
         return {"title": cinema.title, "year": cinema.year}
 
-    def upsert_cinema(self, cinema: CineInfo):
+    def save_cinema(self, cinema: CineInfo) -> str:
+        """Insert a new movie, update changed fields, or skip an identical document.
+
+        Returns one of: ``inserted``, ``updated`` or ``unchanged``.
+        Only fields emitted by ``CineInfo.to_dict()`` are compared; MongoDB's
+        internal ``_id`` and unrelated metadata do not trigger an update.
+        """
         document = cinema.to_dict()
-        result = self._collection.update_one(self._upsert_filter(cinema), {"$set": document}, upsert=True)
-        logger.debug("MongoDB upsert result for %s: %s", cinema.title, result.raw_result)
-        return result
+        query = self._upsert_filter(cinema)
+        existing = self._collection.find_one(query)
 
-    def ping(self):
-        """Verify connectivity and authentication with MongoDB."""
-        if self._client is None:
-            # An injected collection is used, for example, in unit tests.
-            return
+        if existing is None:
+            result = self._collection.update_one(query, {"$set": document}, upsert=True)
+            logger.info("Inserted movie %s (%s)", cinema.title, cinema.year)
+            logger.debug("MongoDB insert/upsert result: %s", getattr(result, "raw_result", result))
+            return "inserted"
 
-        self._client.admin.command("ping")
+        unchanged = all(key in existing and existing[key] == value for key, value in document.items())
+        if unchanged:
+            logger.debug("No changes for %s (%s); skipping MongoDB write", cinema.title, cinema.year)
+            return "unchanged"
+
+        result = self._collection.update_one(query, {"$set": document}, upsert=False)
+        logger.info("Updated changed fields for %s (%s)", cinema.title, cinema.year)
+        logger.debug("MongoDB update result: %s", getattr(result, "raw_result", result))
+        return "updated"
+
+    def upsert_cinema(self, cinema: CineInfo):
+        """Backward-compatible upsert API."""
+        return self._collection.update_one(
+            self._upsert_filter(cinema), {"$set": cinema.to_dict()}, upsert=True
+        )
 
     def close(self):
         if self._client is not None:

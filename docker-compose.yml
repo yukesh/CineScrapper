@@ -20,8 +20,10 @@ services:
       mongo:
         condition: service_healthy
     command:
-      - "--year"
-      - "${YEAR:-2026}"
+      - "--start-year"
+      - "${START_YEAR:-${YEAR:-2026}}"
+      - "--end-year"
+      - "${END_YEAR:-${YEAR:-2026}}"
       - "--log-level"
       - "${LOG_LEVEL:-INFO}"
       - "--batch-size"

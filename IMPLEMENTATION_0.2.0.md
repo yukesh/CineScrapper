@@ -1,64 +1,56 @@
-# CineScrapper 0.2.0-dev implementation overlay
+# CineScrapper 0.2.0-dev overlay
 
-This overlay refactors the scraper into a restartable batch pipeline without changing the existing parser/model contract.
+This overlay adds controlled HTTP requests, retry/backoff, batch processing, and MongoDB-backed job/item progress to the existing CineScrapper repository. It does not replace the repository's existing parser or data models.
 
-## Flow
+## Year range
 
-```text
-CLI
-  -> discover yearly movie rows
-  -> BatchProcessor
-       -> MovieProcessor
-            -> Wikipedia (cached + rate limited + retry)
-            -> Apple/iTunes (rate limited + retry)
-       -> Mongo movie upsert
-       -> Mongo scrape item state
-```
-
-## Batch behaviour
-
-- `--batch-size` controls the number of movies handled per batch.
-- A movie is marked `COMPLETED` only after movie processing and Mongo upsert succeed.
-- A failed movie is marked `FAILED`; processing continues with the rest of the batch.
-- The job ends with a non-zero exception when any movie failed, allowing Docker/cron to detect a partial failure.
-- A subsequent run skips completed items for the same `wiki-source/year/v0.2.0` job unless `--force` is used.
-
-## Mongo collections
-
-Existing movie data remains in the configured cinema collection.
-
-Two additional collections are created when Mongo is enabled:
-
-- `scrape_jobs`: one document per logical scrape job.
-- `scrape_items`: per-movie completion/failure state.
-
-## Rate limits
-
-Defaults:
-
-- Wikipedia: 1.5 seconds minimum interval + jitter
-- Apple/iTunes: 2.0 seconds minimum interval + jitter
-- retries: 3 attempts
-- retry delay honours `Retry-After` for 429 responses and uses bounded exponential backoff otherwise
-
-CLI values override environment values.
-
-## Docker
-
-The container is intentionally a finite job. Starting the scraper container performs one scrape job and then exits.
-
-Example:
+Run one year (the default remains the current year):
 
 ```bash
-YEAR=2026 BATCH_SIZE=10 docker compose --profile scraper run --rm scraper
+cinescrapper --year 2024
 ```
 
-Force a complete reprocessing of the job:
+Run an inclusive year range:
 
 ```bash
-docker compose --profile scraper run --rm scraper --force
+cinescrapper --start-year 2020 --end-year 2026
 ```
 
-## Important
+Resume after an interrupted run:
 
-This is an overlay against the `0.1.1-dev` branch. It does not push or modify GitHub. Apply the files locally, run the test suite, then commit when you are happy with the behaviour.
+```bash
+cinescrapper --start-year 2020 --end-year 2026 --resume
+```
+
+The scraper handles years in ascending order. A failure in one year is logged and does not prevent subsequent years in a range from being attempted. Invalid or incomplete year ranges are rejected by the CLI.
+
+## Incremental MongoDB writes
+
+For each processed film, `MongoCinemaWriter.save_cinema()` compares the scraped document fields against the matching existing document:
+
+- `inserted`: no matching document exists; insert via upsert.
+- `updated`: one or more scraped fields differ; update the scraped fields.
+- `unchanged`: all scraped fields match; skip the database write.
+
+MongoDB's `_id` and unrelated metadata are not used to decide whether the scraped data changed. The existing `upsert_cinema()` method remains available for compatibility. For reliable duplicate prevention across concurrent processes, create a unique index for the chosen stable identity (`ref`, or a normalized `(title, year)` fallback) after reviewing existing duplicates.
+
+## Resume behaviour
+
+When MongoDB is enabled, job and item status are stored in `scrape_jobs` and `scrape_items`. Re-running a year range normally re-scrapes its films and compares them with MongoDB, so changed source data can be detected. Use `--resume` after an interrupted run to skip items already marked completed. `--force` overrides `--resume` and reprocesses all items; MongoDB comparison still avoids unnecessary writes when data is identical.
+
+Without MongoDB, the scraper can process a year range but does not have persistent job/item resume state.
+
+## Docker Compose
+
+Set `START_YEAR` and `END_YEAR` in the environment. Defaults are both `2026`, which runs a single year. Example:
+
+```bash
+START_YEAR=2020 END_YEAR=2026 docker compose --profile scraper run --rm scraper
+```
+
+## Notes
+
+- The existing `--year` single-year option remains supported.
+- The year range is inclusive.
+- A scrape result is compared field-by-field only after Wikipedia/Apple Music processing succeeds.
+- Verify MongoDB indexes and connection settings before production use.

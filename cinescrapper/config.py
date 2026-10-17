@@ -27,6 +27,7 @@ class ScraperConfig:
     cache_ttl_seconds: int = 7 * 24 * 60 * 60
     request_timeout: float = 15.0
     force: bool = False
+    resume: bool = False
 
     @classmethod
     def from_env(cls) -> "ScraperConfig":
@@ -41,6 +42,7 @@ class ScraperConfig:
             cache_ttl_seconds=_env_int("CINESCRAPPER_CACHE_TTL", 7 * 24 * 60 * 60),
             request_timeout=_env_float("CINESCRAPPER_REQUEST_TIMEOUT", 15.0),
             force=os.getenv("CINESCRAPPER_FORCE", "false").lower() in {"1", "true", "yes", "y"},
+            resume=os.getenv("CINESCRAPPER_RESUME", "false").lower() in {"1", "true", "yes", "y"},
         )
 
     def validate(self) -> None:
