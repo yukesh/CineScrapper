@@ -1,5 +1,7 @@
 from datetime import date
 import argparse
+import os
+from dotenv import load_dotenv
 
 from cinescrapper import __version__
 from cinescrapper.config import ScraperConfig
@@ -7,6 +9,7 @@ from cinescrapper.mongo_writer import create_mongo_writer
 from cinescrapper.scrapper import scrape_cinemas
 from cinescrapper.logger import setup_logger, get_logger
 
+load_dotenv()
 
 def main():
     parser = argparse.ArgumentParser(description="CineScrapper: Scrape cinema data from Wikipedia.")
@@ -28,9 +31,30 @@ def main():
     parser.add_argument("--resume", action="store_true", help="Skip movies already completed in the saved job state")
     parser.add_argument("--force", action="store_true", help="Reprocess all movies; overrides --resume")
     parser.add_argument("--mongo-enabled", action="store_true")
-    parser.add_argument("--mongo-uri", default="mongodb://localhost:27017")
-    parser.add_argument("--mongo-db", default="cinescrapper")
-    parser.add_argument("--mongo-collection", default="cinemas")
+    parser.add_argument(
+        "--mongo-uri",
+        default=os.getenv(
+            "CINESCRAPPER_MONGO_URI",
+            os.getenv("MONGODB_URI", "mongodb://localhost:27017"),
+        ),
+        help="MongoDB connection URI",
+    )
+    parser.add_argument(
+        "--mongo-db",
+        default=os.getenv(
+            "CINESCRAPPER_MONGODB_DATABASE",
+            os.getenv("MONGODB_DATABASE", "cine_info"),
+        ),
+        help="MongoDB Database Name",
+    )
+    parser.add_argument(
+        "--mongo-collection",
+        default=os.getenv(
+            "CINESCRAPPER_MONGODB_COLLECTION",
+            os.getenv("MONGODB_COLLECTION", "cinemas"),
+        ),
+        help="MongoDB Collection Name",
+    )
     args = parser.parse_args()
 
     if (args.start_year is None) != (args.end_year is None):
