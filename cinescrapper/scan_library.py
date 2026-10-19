@@ -30,7 +30,10 @@ AUDIO_EXTENSIONS = {
     ".opus",
 }
 
-FILM_RE = re.compile(r"^(?P<title>.+?)\s*\[(?P<year>\d{4})\]\s*$")
+FILM_RE = re.compile(
+    r"^(?P<title>.+?)\s+\[(?P<year>\d{4})\]"
+    r"(?:\s+.*)?$"
+)
 OST_NAME = "Original Soundtrack"
 
 logging.basicConfig(
