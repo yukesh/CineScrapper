@@ -946,12 +946,12 @@ def main():
     configure_logging(args.log_level)
 
     mongo_uri = args.mongo_uri or os.environ.get(
-        "CINESCRAPPER_MONGO_URI"
+        "MONGODB_URI"
     )
 
     if not mongo_uri:
         logger.error(
-            "MongoDB URI missing. Set CINESCRAPPER_MONGO_URI in .env "
+            "MongoDB URI missing. Set MONGODB_URI in .env "
             "or the environment, or pass --mongo-uri."
         )
         return 2
@@ -1023,22 +1023,22 @@ def main():
                 review_rows.append(result["review"])
 
         write_csv(
-            report_dir / "soundtrack_tracks_added.csv",
+            report_dir / "added_tracks" / "soundtrack_tracks_added.csv",
             ADDED_TRACK_FIELDS,
             added_rows,
-            )
+        )
 
         write_csv(
-            report_dir / "soundtrack_cinemas_not_found.csv",
+            report_dir / "not_found" / "soundtrack_cinemas_not_found.csv",
             NOT_FOUND_FIELDS,
             not_found_rows,
-            )
+        )
 
         write_csv(
-            report_dir / "soundtrack_match_review.csv",
+            report_dir / "match_review" / "soundtrack_match_review.csv",
             MATCH_REVIEW_FIELDS,
             review_rows,
-            )
+        )
 
         summary_rows = [
             {"metric": key, "count": value}
@@ -1057,10 +1057,10 @@ def main():
         ])
 
         write_csv(
-            report_dir / "soundtrack_reconciliation_summary.csv",
+            report_dir / "summary" / "soundtrack_reconciliation_summary.csv",
             ["metric", "count"],
             summary_rows,
-            )
+        )
 
         logger.info("Reconciliation summary:")
 
