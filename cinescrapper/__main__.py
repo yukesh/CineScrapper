@@ -43,7 +43,7 @@ def main():
         "--mongo-db",
         default=os.getenv(
             "CINESCRAPPER_MONGODB_DATABASE",
-            os.getenv("MONGODB_DATABASE", "cine_info"),
+            os.getenv("MONGODB_DATABASE", "cinescrapper"),
         ),
         help="MongoDB Database Name",
     )

@@ -1,5 +1,8 @@
-from dataclasses import dataclass, field, asdict
+"""Dataclasses representing cinema metadata stored in MongoDB."""
+
+from dataclasses import asdict, dataclass, field
 from typing import List, Optional
+
 
 @dataclass
 class SourceInfo:
@@ -14,6 +17,8 @@ class TrackInfo:
     lyrics: Optional[str] = None
     singers: Optional[str] = None
     length: Optional[str] = None
+    # Individual track selection; default is not selected.
+    add_collection: bool = False
 
 
 @dataclass
@@ -22,6 +27,8 @@ class SoundtrackInfo:
     composer: Optional[str] = None
     ref: Optional[str] = None
     tracks: List[TrackInfo] = field(default_factory=list)
+    # Select the soundtrack as a whole; independent of track flags.
+    add_collection: bool = False
 
     def add_track(self, track: TrackInfo):
         if track not in self.tracks:
@@ -38,6 +45,9 @@ class CineInfo:
     ref: Optional[str] = None
     source: List[SourceInfo] = field(default_factory=list)
     soundtrack: Optional[SoundtrackInfo] = None
+    # Cinema-level state. These flags are independent of soundtrack/track flags.
+    downloaded: bool = False
+    add_collection: bool = False
 
     def add_cast_member(self, member: str):
         if member not in self.cast:
@@ -55,7 +65,7 @@ class CineInfo:
         self.soundtrack = soundtrack
 
     def to_dict(self):
-        """Serialize to clean dict, including nested SourceInfo objects."""
+        """Serialize this cinema and all nested dataclasses to dictionaries."""
         return asdict(self)
 
     def __str__(self):

@@ -109,6 +109,55 @@ class MongoCinemaWriter:
 
         return None
 
+    @staticmethod
+    def _preserve_existing_flags(document: dict, existing: dict) -> dict:
+        """Preserve user-managed flags when metadata is refreshed by a scrape."""
+        # These are user-managed/persistent flags. A normal Wikipedia scrape
+        # should never reset them to dataclass defaults. Preserve all existing
+        # values when refreshing metadata; dedicated tools can change them.
+        for flag in ("downloaded", "add_collection"):
+            if flag in existing:
+                document[flag] = existing[flag]
+
+        existing_soundtrack = existing.get("soundtrack")
+        incoming_soundtrack = document.get("soundtrack")
+        if isinstance(existing_soundtrack, dict) and isinstance(incoming_soundtrack, dict):
+            if "add_collection" in existing_soundtrack:
+                incoming_soundtrack["add_collection"] = existing_soundtrack["add_collection"]
+
+            existing_tracks = existing_soundtrack.get("tracks", [])
+            incoming_tracks = incoming_soundtrack.get("tracks", [])
+            if isinstance(existing_tracks, list) and isinstance(incoming_tracks, list):
+                # Match by stable track number/title where possible. Preserve a
+                # track's selection flag even if other metadata is refreshed.
+                def track_key(track):
+                    if not isinstance(track, dict):
+                        return None
+                    number = track.get("number")
+                    title = _normalized_title(track.get("title"))
+                    if number is not None and title:
+                        return (str(number), title)
+                    if title:
+                        return (None, title)
+                    return None
+
+                flags_by_key = {}
+                for old_track in existing_tracks:
+                    key = track_key(old_track)
+                    if key is not None and isinstance(old_track, dict) and "add_collection" in old_track:
+                        flags_by_key.setdefault(key, []).append(old_track["add_collection"])
+
+                for new_track in incoming_tracks:
+                    key = track_key(new_track)
+                    if key is not None and key in flags_by_key and flags_by_key[key]:
+                        new_track["add_collection"] = flags_by_key[key].pop(0)
+                    elif key is not None:
+                        new_track.setdefault("add_collection", False)
+                    elif isinstance(new_track, dict):
+                        new_track.setdefault("add_collection", False)
+
+        return document
+
     def save_cinema(self, cinema: CineInfo) -> str:
         """
         Insert a new movie, update changed fields, or skip an identical document.
@@ -146,6 +195,8 @@ class MongoCinemaWriter:
                 getattr(result, "raw_result", result),
             )
             return "inserted"
+
+        document = self._preserve_existing_flags(document, existing)
 
         # If this is the same logical title, keep its existing stored title.
         # This prevents routine scraping from renaming legacy records.
@@ -187,10 +238,15 @@ class MongoCinemaWriter:
         return "updated"
 
     def upsert_cinema(self, cinema: CineInfo):
-        """Backward-compatible upsert API."""
+        """Backward-compatible upsert API that preserves existing flags."""
+        document = cinema.to_dict()
+        query = self._upsert_filter(cinema)
+        existing = self._collection.find_one(query)
+        if existing is not None:
+            document = self._preserve_existing_flags(document, existing)
         return self._collection.update_one(
-            self._upsert_filter(cinema),
-            {"$set": cinema.to_dict()},
+            query,
+            {"$set": document},
             upsert=True,
         )
 
