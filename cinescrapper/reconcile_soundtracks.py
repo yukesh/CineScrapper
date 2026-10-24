@@ -11,7 +11,7 @@ Features:
   candidate matches, and reconciliation summary.
 - Preserves existing track metadata and add_collection values.
 - Sets add_collection=False for new tracks.
-- Sets downloaded=True when supported local audio tracks are found.
+- Writes only local-library track data to soundtrack; never changes downloaded.
 - Ignores Background Score; processes manifest OST tracks only.
 - Uses certifi for TLS-enabled MongoDB connections.
 - Defaults to dry-run; use --apply to write changes.
@@ -206,6 +206,7 @@ def load_cinema_catalogue(collection):
             {
                 "title": 1,
                 "year": 1,
+                "soundtrack": 1,
             },
         )
     )
@@ -468,9 +469,9 @@ def get_manifest_tracks(entry):
             continue
 
         valid_tracks.append({
-            **track,
-            "filename": filename,
+            "fileName": filename,
             "relative_path": relative_path,
+            "add_collection": bool(track.get("add_collection", False)),
         })
 
     return valid_tracks
@@ -482,7 +483,12 @@ def get_manifest_tracks(entry):
 
 def track_identity(track):
     """Use normalized filename as the primary track identity."""
-    filename = str(track.get("filename") or "").strip()
+    filename = str(track.get("fileName") or track.get("filename") or "").strip()
+    relative_path = str(track.get("relative_path") or "").strip()
+
+    # Relative path is the strongest identity because filenames can repeat.
+    if relative_path:
+        return relative_path.casefold()
 
     if filename:
         return normalize_text(filename)
@@ -491,84 +497,62 @@ def track_identity(track):
 
 
 def merge_tracks(existing_tracks, local_tracks):
-    """
-    Merge local tracks into existing tracks.
-
-    Existing metadata and add_collection values are preserved.
-
-    Returns:
-        merged_tracks, added_tracks, matched_count
-    """
-    merged = []
+    """Merge local tracks, preserving selection flags for matching paths."""
     existing_by_identity = {}
-
     for existing in existing_tracks:
         if not isinstance(existing, dict):
-            logger.warning(
-                "Ignoring unexpected existing track structure: %r",
-                existing,
-            )
+            logger.warning("Ignoring unexpected existing track structure: %r", existing)
             continue
-
         identity = track_identity(existing)
-
         if identity:
             existing_by_identity.setdefault(identity, []).append(existing)
-        else:
-            merged.append(dict(existing))
 
+    merged = []
     added_tracks = []
     matched_count = 0
     seen_local = set()
 
     for local in local_tracks:
         identity = track_identity(local)
-
         if not identity:
-            logger.warning("Cannot identify track: %r", local)
+            logger.warning("Cannot identify local track: %r", local)
             continue
-
         if identity in seen_local:
-            logger.warning(
-                "Duplicate track in manifest ignored: %s",
-                local.get("filename"),
-            )
+            logger.warning("Duplicate local track ignored: %s", local.get("fileName"))
             continue
-
         seen_local.add(identity)
-        matches = existing_by_identity.get(identity, [])
 
+        matches = existing_by_identity.get(identity, [])
         if matches:
             existing = matches.pop(0)
-            updated = dict(existing)
-
-            # Refresh local file details while preserving other metadata.
-            updated["filename"] = local["filename"]
-            updated["relative_path"] = local["relative_path"]
-
-            updated.setdefault("add_collection", False)
-
-            for key, value in local.items():
-                if key not in updated:
-                    updated[key] = value
-
-            merged.append(updated)
+            merged_track = {
+                "fileName": local["fileName"],
+                "relative_path": local["relative_path"],
+                "add_collection": existing.get("add_collection", False),
+            }
+            merged.append(merged_track)
             matched_count += 1
         else:
-            new_track = dict(local)
-            new_track.setdefault("add_collection", False)
-
+            new_track = {
+                "fileName": local["fileName"],
+                "relative_path": local["relative_path"],
+                "add_collection": False,
+            }
             merged.append(new_track)
             added_tracks.append(new_track)
 
-    # Do not delete tracks absent from this particular scan.
+    # Preserve existing tracks not seen in this scan rather than deleting data.
     for remaining in existing_by_identity.values():
-        merged.extend(remaining)
+        for track in remaining:
+            merged.append({
+                "fileName": track.get("fileName") or track.get("filename") or "",
+                "relative_path": track.get("relative_path", ""),
+                "add_collection": track.get("add_collection", False),
+            })
 
     return merged, added_tracks, matched_count
 
 
-# ---------------------------------------------------------------------------
 # CSV reports
 # ---------------------------------------------------------------------------
 
@@ -577,7 +561,7 @@ ADDED_TRACK_FIELDS = [
     "year",
     "language",
     "language_folder",
-    "filename",
+    "fileName",
     "relative_path",
     "add_collection",
     "action",
@@ -637,7 +621,7 @@ def build_added_track_rows(entry, added_tracks, action):
             "year": entry.get("year", ""),
             "language": entry.get("language", ""),
             "language_folder": entry.get("language_folder", ""),
-            "filename": track.get("filename", ""),
+            "fileName": track.get("fileName", track.get("filename", "")),
             "relative_path": track.get("relative_path", ""),
             "add_collection": track.get("add_collection", False),
             "action": action,
@@ -802,35 +786,10 @@ def reconcile_cinema(collection, catalogue, entry, apply_changes):
         local_tracks,
     )
 
-    updated_soundtrack = dict(existing_soundtrack)
-    # Add the soundtrack-level flag for legacy documents without resetting an
-    # existing True/False selection. Track flags are preserved by merge_tracks.
-    updated_soundtrack.setdefault("add_collection", False)
-    updated_soundtrack["folder_name"] = DEFAULT_SOUNDTRACK_NAME
-    updated_soundtrack["tracks"] = merged_tracks
-
-    local_library = updated_soundtrack.get("local_library", {})
-
-    if not isinstance(local_library, dict):
-        local_library = {}
-
-    local_library = dict(local_library)
-
-    for key in ("language", "language_folder", "relative_path"):
-        if entry.get(key) is not None:
-            local_library[key] = entry[key]
-
-    local_library["last_scanned_at"] = datetime.now(
-        timezone.utc
-    ).isoformat()
-
-    local_library["track_count"] = len(local_tracks)
-    updated_soundtrack["local_library"] = local_library
-
-    update_fields = {
-        "soundtrack": updated_soundtrack,
-        "downloaded": True,
-    }
+    # Keep local soundtrack minimal. Wikipedia metadata is stored separately
+    # in soundtrack_wiki and must not be modified by this reconciliation.
+    updated_soundtrack = {"tracks": merged_tracks}
+    update_fields = {"soundtrack": updated_soundtrack}
 
     changed = any(
         document.get(key) != value

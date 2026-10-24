@@ -44,7 +44,7 @@ class CineInfo:
     studio: Optional[str] = None
     ref: Optional[str] = None
     source: List[SourceInfo] = field(default_factory=list)
-    soundtrack: Optional[SoundtrackInfo] = None
+    soundtrack_wiki: Optional[SoundtrackInfo] = None
     # Cinema-level state. These flags are independent of soundtrack/track flags.
     downloaded: bool = False
     add_collection: bool = False
@@ -61,8 +61,18 @@ class CineInfo:
         if source not in self.source:
             self.source.append(source)
 
+    @property
+    def soundtrack(self) -> Optional[SoundtrackInfo]:
+        """Backward-compatible alias for the Wikipedia-scraped soundtrack."""
+        return self.soundtrack_wiki
+
+    @soundtrack.setter
+    def soundtrack(self, value: Optional[SoundtrackInfo]) -> None:
+        self.soundtrack_wiki = value
+
     def apply_soundtrack(self, soundtrack: SoundtrackInfo):
-        self.soundtrack = soundtrack
+        """Store scraped soundtrack metadata separately from local tracks."""
+        self.soundtrack_wiki = soundtrack
 
     def to_dict(self):
         """Serialize this cinema and all nested dataclasses to dictionaries."""
