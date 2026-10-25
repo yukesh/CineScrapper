@@ -4,6 +4,11 @@ Dry-run is the default. Pass --apply to add only missing fields. Existing
 values (including False) are preserved.
 """
 
+
+from cinescrapper.env import load_project_env
+
+load_project_env()
+
 import argparse
 import os
 from urllib.parse import parse_qs, urlparse
@@ -15,9 +20,9 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Audit missing default flags in CineScrapper cinema documents."
     )
-    parser.add_argument("--uri", default=os.getenv("MONGODB_URI", "mongodb://localhost:27017"), help="MongoDB connection URI.")
-    parser.add_argument("--database", default=os.getenv("MONGODB_DATABASE", "cinescrapper"), help="MongoDB database name.")
-    parser.add_argument("--collection", default=os.getenv("MONGODB_COLLECTION", "cinemas"), help="MongoDB collection name.")
+    parser.add_argument("--uri", default=os.getenv("CINESCRAPPER_MONGO_URI") or os.getenv("MONGODB_URI") or "mongodb://localhost:27017", help="MongoDB connection URI.")
+    parser.add_argument("--database", default=os.getenv("CINESCRAPPER_MONGODB_DATABASE") or os.getenv("MONGODB_DATABASE") or "cinescrapper", help="MongoDB database name.")
+    parser.add_argument("--collection", default=os.getenv("CINESCRAPPER_MONGODB_COLLECTION") or os.getenv("MONGODB_COLLECTION") or "cinemas", help="MongoDB collection name.")
     parser.add_argument("--apply", action="store_true", help="Write missing fields; otherwise dry-run only.")
     return parser.parse_args()
 

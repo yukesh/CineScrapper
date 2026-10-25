@@ -1,5 +1,24 @@
 # 🎬 CineScrapper
 
+
+## Environment configuration (`.env`)
+
+CineScrapper automatically loads `.env` from the repository root for the CLI,
+MongoDB maintenance scripts, and soundtrack tools. It does not depend on the
+current working directory. Copy `.env.example` to `.env` and set your values;
+never commit real credentials. Shell environment variables override `.env`.
+
+MongoDB settings accept either `CINESCRAPPER_MONGO_URI` /
+`CINESCRAPPER_MONGODB_DATABASE` / `CINESCRAPPER_MONGODB_COLLECTION` or the
+compatible aliases `MONGODB_URI` / `MONGODB_DATABASE` / `MONGODB_COLLECTION`.
+The `CINESCRAPPER_*` names take precedence.
+
+```bash
+cp .env.example .env
+# Edit .env with your actual connection URI, then run tools as usual.
+python -m cinescrapper.test_mongo
+```
+
 CineScrapper is a Python command-line tool that scrapes Wikipedia for cinema data (such as Tamil-language film listings).  
 It uses a local cache to avoid unnecessary repeated Wikipedia API calls and provides structured logging with color output.
 

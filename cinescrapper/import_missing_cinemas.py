@@ -7,6 +7,11 @@ by this script; review them separately to avoid duplicate cinema records.
 """
 from __future__ import annotations
 
+from cinescrapper.env import load_project_env
+
+load_project_env()
+
+
 import argparse
 import json
 import logging
@@ -102,8 +107,7 @@ def load_approved(path: Path) -> list[dict]:
 
 def main() -> int:
     try:
-        from dotenv import load_dotenv
-        load_dotenv()
+        load_project_env()
     except ImportError:
         pass
 

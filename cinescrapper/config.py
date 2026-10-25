@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from cinescrapper.env import load_project_env
+
+load_project_env()
+
+
 import os
 from dataclasses import dataclass
 

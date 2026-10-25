@@ -10,6 +10,11 @@ are reported and skipped. No fields other than `title` are modified.
 
 from __future__ import annotations
 
+from cinescrapper.env import load_project_env
+
+load_project_env()
+
+
 import argparse
 import csv
 import os
@@ -140,8 +145,7 @@ def audit_and_clean(collection, apply_changes: bool) -> tuple[dict[str, int], li
 
 def main() -> None:
     try:
-        from dotenv import load_dotenv
-        load_dotenv()
+        load_project_env()
     except ImportError:
         pass
 

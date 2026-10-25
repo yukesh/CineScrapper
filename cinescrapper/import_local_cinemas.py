@@ -4,6 +4,11 @@
 Dry-run is the default. Only entries whose status is exactly "approved" are
 considered. Existing cinema documents and soundtrack_wiki are never updated.
 """
+
+from cinescrapper.env import load_project_env
+
+load_project_env()
+
 import argparse
 import json
 import os

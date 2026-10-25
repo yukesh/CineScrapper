@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 """
 Reconcile a local soundtrack manifest with MongoDB.
@@ -9,15 +8,20 @@ Features:
 - Generates fuzzy-match suggestions with confidence scores.
 - Produces CSV reports for new tracks, unmatched cinemas,
   candidate matches, and reconciliation summary.
-- Preserves existing track metadata and add_collection values.
-- Sets add_collection=False for new tracks.
-- Writes only local-library track data to soundtrack; never changes downloaded.
+- Rebuilds soundtrack.tracks exactly from the current local manifest.
+- Preserves add_collection only for paths unchanged since the previous scan.
+- Sets downloaded=True for every safely matched cinema folder.
+- Writes only local-library track data to soundtrack; never changes soundtrack_wiki.
 - Ignores Background Score; processes manifest OST tracks only.
 - Uses certifi for TLS-enabled MongoDB connections.
 - Defaults to dry-run; use --apply to write changes.
 
 Fuzzy suggestions are never automatically used to update MongoDB.
 """
+
+from cinescrapper.env import load_project_env
+
+load_project_env()
 
 import argparse
 import csv
@@ -207,6 +211,7 @@ def load_cinema_catalogue(collection):
                 "title": 1,
                 "year": 1,
                 "soundtrack": 1,
+                "downloaded": 1,
             },
         )
     )
@@ -496,61 +501,55 @@ def track_identity(track):
     return normalize_text(track.get("relative_path") or "")
 
 
-def merge_tracks(existing_tracks, local_tracks):
-    """Merge local tracks, preserving selection flags for matching paths."""
-    existing_by_identity = {}
-    for existing in existing_tracks:
-        if not isinstance(existing, dict):
-            logger.warning("Ignoring unexpected existing track structure: %r", existing)
+def rebuild_tracks(existing_tracks, local_tracks):
+    """Build soundtrack.tracks exactly from the current local manifest.
+
+    Preserve add_collection only for tracks whose relative_path is unchanged.
+    Renamed/moved files are treated as new tracks and default to False. Tracks
+    no longer present locally are omitted from the rebuilt soundtrack node.
+    """
+    existing_by_path = {}
+    for track in existing_tracks if isinstance(existing_tracks, list) else []:
+        if not isinstance(track, dict):
             continue
-        identity = track_identity(existing)
-        if identity:
-            existing_by_identity.setdefault(identity, []).append(existing)
+        path = str(track.get("relative_path") or "").strip().casefold()
+        if path:
+            existing_by_path.setdefault(path, []).append(track)
 
-    merged = []
-    added_tracks = []
-    matched_count = 0
-    seen_local = set()
-
+    rebuilt = []
+    added = []
+    seen = set()
     for local in local_tracks:
-        identity = track_identity(local)
-        if not identity:
-            logger.warning("Cannot identify local track: %r", local)
+        path = str(local.get("relative_path") or "").strip()
+        identity = path.casefold()
+        if not identity or identity in seen:
             continue
-        if identity in seen_local:
-            logger.warning("Duplicate local track ignored: %s", local.get("fileName"))
-            continue
-        seen_local.add(identity)
-
-        matches = existing_by_identity.get(identity, [])
+        seen.add(identity)
+        matches = existing_by_path.get(identity, [])
         if matches:
-            existing = matches.pop(0)
-            merged_track = {
+            old = matches.pop(0)
+            track = {
                 "fileName": local["fileName"],
-                "relative_path": local["relative_path"],
-                "add_collection": existing.get("add_collection", False),
+                "relative_path": path,
+                "add_collection": old.get("add_collection", False),
             }
-            merged.append(merged_track)
-            matched_count += 1
         else:
-            new_track = {
+            track = {
                 "fileName": local["fileName"],
-                "relative_path": local["relative_path"],
+                "relative_path": path,
                 "add_collection": False,
             }
-            merged.append(new_track)
-            added_tracks.append(new_track)
+            added.append(track)
+        rebuilt.append(track)
 
-    # Preserve existing tracks not seen in this scan rather than deleting data.
-    for remaining in existing_by_identity.values():
-        for track in remaining:
-            merged.append({
-                "fileName": track.get("fileName") or track.get("filename") or "",
-                "relative_path": track.get("relative_path", ""),
-                "add_collection": track.get("add_collection", False),
-            })
-
-    return merged, added_tracks, matched_count
+    old_paths = {
+        str(track.get("relative_path") or "").strip().casefold(): track
+        for track in existing_tracks if isinstance(track, dict)
+        if str(track.get("relative_path") or "").strip()
+    } if isinstance(existing_tracks, list) else {}
+    new_paths = {str(track.get("relative_path") or "").strip().casefold() for track in rebuilt}
+    removed = [track for path, track in old_paths.items() if path not in new_paths]
+    return rebuilt, added, removed
 
 
 # CSV reports
@@ -565,6 +564,11 @@ ADDED_TRACK_FIELDS = [
     "relative_path",
     "add_collection",
     "action",
+]
+
+REMOVED_TRACK_FIELDS = [
+    "film_title", "year", "language", "language_folder",
+    "fileName", "relative_path", "add_collection", "action",
 ]
 
 NOT_FOUND_FIELDS = [
@@ -630,6 +634,23 @@ def build_added_track_rows(entry, added_tracks, action):
     ]
 
 
+def build_removed_track_rows(entry, removed_tracks, action):
+    film_title = entry.get("film_title") or entry.get("title") or ""
+    return [
+        {
+            "film_title": film_title,
+            "year": entry.get("year", ""),
+            "language": entry.get("language", ""),
+            "language_folder": entry.get("language_folder", ""),
+            "fileName": track.get("fileName", track.get("filename", "")),
+            "relative_path": track.get("relative_path", ""),
+            "add_collection": track.get("add_collection", False),
+            "action": action,
+        }
+        for track in removed_tracks
+    ]
+
+
 def build_match_review_row(entry, status, candidates):
     row = {
         "local_title": entry.get("film_title") or entry.get("title") or "",
@@ -691,6 +712,7 @@ def reconcile_cinema(collection, catalogue, entry, apply_changes):
         return {
             "status": "invalid",
             "added_tracks": [],
+            "removed_tracks": [],
             "matched": 0,
             "not_found": None,
             "review": None,
@@ -699,19 +721,11 @@ def reconcile_cinema(collection, catalogue, entry, apply_changes):
     local_tracks = get_manifest_tracks(entry)
 
     if not local_tracks:
-        logger.warning(
-            "No supported audio tracks for %r (%s); skipping",
+        logger.info(
+            "No supported audio tracks for %r (%s); matched cinema will have an empty local soundtrack",
             film_title,
             year,
         )
-
-        return {
-            "status": "no_audio",
-            "added_tracks": [],
-            "matched": 0,
-            "not_found": None,
-            "review": None,
-        }
 
     document, match_error, candidates = find_cinema(
         film_title,
@@ -742,6 +756,7 @@ def reconcile_cinema(collection, catalogue, entry, apply_changes):
         return {
             "status": match_error,
             "added_tracks": [],
+            "removed_tracks": [],
             "matched": 0,
             "not_found": not_found_row,
             "review": review_row,
@@ -759,6 +774,7 @@ def reconcile_cinema(collection, catalogue, entry, apply_changes):
         return {
             "status": "invalid_soundtrack",
             "added_tracks": [],
+            "removed_tracks": [],
             "matched": 0,
             "not_found": None,
             "review": None,
@@ -776,20 +792,24 @@ def reconcile_cinema(collection, catalogue, entry, apply_changes):
         return {
             "status": "invalid_tracks",
             "added_tracks": [],
+            "removed_tracks": [],
             "matched": 0,
             "not_found": None,
             "review": None,
         }
 
-    merged_tracks, added_tracks, matched_count = merge_tracks(
+    rebuilt_tracks, added_tracks, removed_tracks = rebuild_tracks(
         existing_tracks,
         local_tracks,
     )
 
-    # Keep local soundtrack minimal. Wikipedia metadata is stored separately
-    # in soundtrack_wiki and must not be modified by this reconciliation.
-    updated_soundtrack = {"tracks": merged_tracks}
-    update_fields = {"soundtrack": updated_soundtrack}
+    # Replace the local soundtrack node from the current filesystem snapshot.
+    # Wikipedia metadata remains isolated in soundtrack_wiki.
+    updated_soundtrack = {"tracks": rebuilt_tracks}
+    update_fields = {
+        "soundtrack": updated_soundtrack,
+        "downloaded": True,
+    }
 
     changed = any(
         document.get(key) != value
@@ -801,7 +821,7 @@ def reconcile_cinema(collection, catalogue, entry, apply_changes):
         film_title,
         year,
         len(local_tracks),
-        matched_count,
+        len(local_tracks) - len(added_tracks),
         len(added_tracks),
     )
 
@@ -831,7 +851,8 @@ def reconcile_cinema(collection, catalogue, entry, apply_changes):
     return {
         "status": status,
         "added_tracks": added_tracks,
-        "matched": matched_count,
+        "matched": len(local_tracks) - len(added_tracks),
+        "removed_tracks": removed_tracks,
         "not_found": None,
         "review": None,
     }
@@ -860,19 +881,19 @@ def parse_args():
     parser.add_argument(
         "--mongo-uri",
         default=None,
-        help="MongoDB URI; defaults to CINESCRAPPER_MONGO_URI.",
+        help="MongoDB URI; defaults to CINESCRAPPER_MONGO_URI or MONGODB_URI from .env.",
     )
 
     parser.add_argument(
         "--mongo-db",
-        required=True,
-        help="MongoDB database name.",
+        default=os.getenv("CINESCRAPPER_MONGODB_DATABASE") or os.getenv("MONGODB_DATABASE") or "cinescrapper",
+        help="MongoDB database name (defaults to .env).",
     )
 
     parser.add_argument(
         "--mongo-collection",
-        default=DEFAULT_COLLECTION,
-        help=f"MongoDB collection (default: {DEFAULT_COLLECTION}).",
+        default=os.getenv("CINESCRAPPER_MONGODB_COLLECTION") or os.getenv("MONGODB_COLLECTION") or DEFAULT_COLLECTION,
+        help=f"MongoDB collection (defaults to .env or {DEFAULT_COLLECTION}).",
     )
 
     parser.add_argument(
@@ -884,7 +905,7 @@ def parse_args():
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="Write changes to MongoDB. Default is dry-run.",
+        help="Replace soundtrack from the current manifest and set downloaded=True. Default is dry-run.",
     )
 
     parser.add_argument(
@@ -899,22 +920,24 @@ def parse_args():
 def main():
     # Load .env when python-dotenv is installed.
     try:
-        from dotenv import load_dotenv
-        load_dotenv()
+        load_project_env()
     except ImportError:
         pass
 
     args = parse_args()
     configure_logging(args.log_level)
 
-    mongo_uri = args.mongo_uri or os.environ.get(
-        "CINESCRAPPER_MONGO_URI"
+    mongo_uri = (
+        args.mongo_uri
+        or os.getenv("CINESCRAPPER_MONGO_URI")
+        or os.getenv("MONGODB_URI")
+        or "mongodb://localhost:27017"
     )
 
     if not mongo_uri:
         logger.error(
-            "MongoDB URI missing. Set CINESCRAPPER_MONGO_URI in .env "
-            "or the environment, or pass --mongo-uri."
+            "MongoDB URI missing. Set CINESCRAPPER_MONGO_URI or MONGODB_URI "
+            "in the project-root .env, or pass --mongo-uri."
         )
         return 2
 
@@ -927,6 +950,7 @@ def main():
     report_dir = Path(args.report_dir).expanduser()
 
     added_rows = []
+    removed_rows = []
     not_found_rows = []
     review_rows = []
 
@@ -971,11 +995,10 @@ def main():
             action = "APPLIED" if args.apply else "DRY_RUN"
 
             added_rows.extend(
-                build_added_track_rows(
-                    entry,
-                    result["added_tracks"],
-                    action,
-                )
+                build_added_track_rows(entry, result.get("added_tracks", []), action)
+            )
+            removed_rows.extend(
+                build_removed_track_rows(entry, result.get("removed_tracks", []), action)
             )
 
             if result["not_found"] is not None:
@@ -989,6 +1012,12 @@ def main():
             ADDED_TRACK_FIELDS,
             added_rows,
             )
+
+        write_csv(
+            report_dir / "soundtrack_tracks_removed.csv",
+            REMOVED_TRACK_FIELDS,
+            removed_rows,
+        )
 
         write_csv(
             report_dir / "soundtrack_cinemas_not_found.csv",
@@ -1013,6 +1042,10 @@ def main():
                 "count": len(added_rows),
             },
             {
+                "metric": "old_tracks_removed_from_local_soundtrack",
+                "count": len(removed_rows),
+            },
+            {
                 "metric": "cinemas_needing_review",
                 "count": len(not_found_rows),
             },
@@ -1030,6 +1063,7 @@ def main():
             logger.info("  %s: %d", key, value)
 
         logger.info("New tracks detected: %d", len(added_rows))
+        logger.info("Old tracks removed from rebuilt soundtrack: %d", len(removed_rows))
         logger.info("Cinemas needing review: %d", len(not_found_rows))
         logger.info("Match review entries: %d", len(review_rows))
         logger.info("Reports directory: %s", report_dir.resolve())

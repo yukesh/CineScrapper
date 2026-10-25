@@ -4,6 +4,11 @@
 Dry-run is the default. Existing soundtrack_wiki values are never overwritten.
 Documents containing both fields are reported for manual review.
 """
+
+from cinescrapper.env import load_project_env
+
+load_project_env()
+
 import argparse
 import os
 from urllib.parse import parse_qs, urlparse

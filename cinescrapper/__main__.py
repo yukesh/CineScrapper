@@ -1,7 +1,11 @@
+
+from cinescrapper.env import load_project_env
+
+load_project_env()
+
 from datetime import date
 import argparse
 import os
-from dotenv import load_dotenv
 
 from cinescrapper import __version__
 from cinescrapper.config import ScraperConfig
@@ -9,7 +13,6 @@ from cinescrapper.mongo_writer import create_mongo_writer
 from cinescrapper.scrapper import scrape_cinemas
 from cinescrapper.logger import setup_logger, get_logger
 
-load_dotenv()
 
 def main():
     parser = argparse.ArgumentParser(description="CineScrapper: Scrape cinema data from Wikipedia.")

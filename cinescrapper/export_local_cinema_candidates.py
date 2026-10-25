@@ -4,6 +4,11 @@
 The output is a review file, not an automatic insert. Set status to "approved"
 only after checking possible multilingual/title variants.
 """
+
+from cinescrapper.env import load_project_env
+
+load_project_env()
+
 import argparse
 import difflib
 import json

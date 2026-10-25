@@ -3,6 +3,11 @@
 
 from __future__ import annotations
 
+from cinescrapper.env import load_project_env
+
+load_project_env()
+
+
 import argparse
 import difflib
 import json
@@ -231,8 +236,7 @@ def parse_args():
 
 def main() -> int:
     try:
-        from dotenv import load_dotenv
-        load_dotenv()
+        load_project_env()
     except ImportError:
         pass
 

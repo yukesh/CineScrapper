@@ -119,8 +119,13 @@ class MongoCinemaWriter:
             if flag in existing:
                 document[flag] = existing[flag]
 
-        existing_soundtrack = existing.get("soundtrack")
-        incoming_soundtrack = document.get("soundtrack")
+        existing_soundtrack = existing.get("soundtrack_wiki")
+        incoming_soundtrack = document.get("soundtrack_wiki")
+        # A scrape that did not retrieve soundtrack metadata must not erase
+        # previously stored Wikipedia metadata.
+        if incoming_soundtrack is None and isinstance(existing_soundtrack, dict):
+            document["soundtrack_wiki"] = existing_soundtrack
+            incoming_soundtrack = existing_soundtrack
         if isinstance(existing_soundtrack, dict) and isinstance(incoming_soundtrack, dict):
             if "add_collection" in existing_soundtrack:
                 incoming_soundtrack["add_collection"] = existing_soundtrack["add_collection"]

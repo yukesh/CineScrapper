@@ -1,19 +1,29 @@
-import os
-from pathlib import Path
+"""Manually verify the configured MongoDB connection. Run with python -m cinescrapper.test_mongo."""
 
-from dotenv import load_dotenv
+import os
+
 from pymongo import MongoClient
 
-# Load .env from the same directory as this script
-env_file = Path(__file__).resolve().parent / ".env"
-load_dotenv(dotenv_path=env_file)
+from cinescrapper.env import load_project_env
 
-uri = os.environ["MONGODB_URI"]
 
-client = MongoClient(uri, serverSelectionTimeoutMS=5000)
+def main() -> int:
+    load_project_env()
+    uri = os.getenv("CINESCRAPPER_MONGO_URI") or os.getenv("MONGODB_URI")
+    if not uri:
+        raise RuntimeError(
+            "MongoDB URI missing. Set CINESCRAPPER_MONGO_URI or MONGODB_URI "
+            "in the project-root .env file."
+        )
 
-try:
-    client.admin.command("ping")
-    print("MongoDB connection successful!")
-finally:
-    client.close()
+    client = MongoClient(uri, serverSelectionTimeoutMS=5000)
+    try:
+        client.admin.command("ping")
+        print("MongoDB connection successful!")
+    finally:
+        client.close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
