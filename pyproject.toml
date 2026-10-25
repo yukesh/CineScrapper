@@ -1,6 +1,6 @@
 [project]
 name = "cinescrapper"
-version = "0.1.0"
+version = "0.2.2"
 description = "A Python project to scrape movie data"
 authors = [
     { name="Yukeshkumar N", email="yukesh@live.com" }
