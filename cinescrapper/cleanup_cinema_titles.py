@@ -10,9 +10,7 @@ are reported and skipped. No fields other than `title` are modified.
 
 from __future__ import annotations
 
-from cinescrapper.env import load_project_env
-
-load_project_env()
+from cinescrapper.env import add_mongo_uri_profile_argument, resolve_mongo_settings
 
 
 import argparse
@@ -62,16 +60,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--uri",
-        default=os.getenv("MONGODB_URI") or os.getenv("CINESCRAPPER_MONGO_URI")
-        or "mongodb://localhost:27017",
-        help="MongoDB URI (default: MONGODB_URI, CINESCRAPPER_MONGO_URI, or localhost).",
+        default=None,
+        help="MongoDB URI; defaults to the configured properties profile.",
     )
-    parser.add_argument("--database", default=os.getenv("MONGODB_DATABASE", "cinescrapper"))
-    parser.add_argument("--collection", default=os.getenv("MONGODB_COLLECTION", "cinemas"))
+    parser.add_argument("--database", default=None)
+    parser.add_argument("--collection", default=None)
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT,
                         help=f"CSV report path (default: {DEFAULT_REPORT}).")
     parser.add_argument("--apply", action="store_true",
                         help="Write safe title changes. Without this flag, dry-run only.")
+    add_mongo_uri_profile_argument(parser)
     return parser.parse_args()
 
 
@@ -144,20 +142,16 @@ def audit_and_clean(collection, apply_changes: bool) -> tuple[dict[str, int], li
 
 
 def main() -> None:
-    try:
-        load_project_env()
-    except ImportError:
-        pass
-
     args = parse_args()
+    mongo = resolve_mongo_settings(profile=args.mongo_uri_profile, uri=args.uri, database=args.database, collection=args.collection)
     print(f"Mode: {'APPLY' if args.apply else 'DRY RUN'}")
-    print(f"Database: {args.database}")
-    print(f"Collection: {args.collection}\n")
+    print(f"Database: {mongo["database"]}")
+    print(f"Collection: {mongo["collection"]}\n")
 
-    client = create_mongo_client(args.uri)
+    client = create_mongo_client(mongo["uri"])
     try:
         client.admin.command("ping")
-        stats, rows = audit_and_clean(client[args.database][args.collection], args.apply)
+        stats, rows = audit_and_clean(client[mongo["database"]][mongo["collection"]], args.apply)
     finally:
         client.close()
 

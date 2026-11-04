@@ -1,23 +1,13 @@
-"""Runtime configuration loaded from CLI arguments and environment variables."""
+"""Runtime configuration loaded from the project properties file and CLI."""
 
 from __future__ import annotations
 
-from cinescrapper.env import load_project_env
-
-load_project_env()
-
-
-import os
 from dataclasses import dataclass
 
+from cinescrapper.env import load_properties
 
 
-def _env_float(name: str, default: float) -> float:
-    return float(os.getenv(name, default))
 
-
-def _env_int(name: str, default: int) -> int:
-    return int(os.getenv(name, default))
 
 
 @dataclass(frozen=True)
@@ -35,19 +25,19 @@ class ScraperConfig:
     resume: bool = False
 
     @classmethod
-    def from_env(cls) -> "ScraperConfig":
+    def from_properties(cls) -> "ScraperConfig":
+        values = load_properties()
+        section = values["scraper"] if values.has_section("scraper") else {}
         return cls(
-            batch_size=_env_int("CINESCRAPPER_BATCH_SIZE", 10),
-            wiki_rate_limit=_env_float("CINESCRAPPER_WIKI_RATE_LIMIT", 1.5),
-            apple_music_rate_limit=_env_float("CINESCRAPPER_APPLE_MUSIC_RATE_LIMIT", 2.0),
-            rate_limit_jitter=_env_float("CINESCRAPPER_RATE_LIMIT_JITTER", 0.25),
-            max_retries=_env_int("CINESCRAPPER_MAX_RETRIES", 3),
-            retry_base_delay=_env_float("CINESCRAPPER_RETRY_BASE_DELAY", 2.0),
-            retry_max_delay=_env_float("CINESCRAPPER_RETRY_MAX_DELAY", 60.0),
-            cache_ttl_seconds=_env_int("CINESCRAPPER_CACHE_TTL", 7 * 24 * 60 * 60),
-            request_timeout=_env_float("CINESCRAPPER_REQUEST_TIMEOUT", 15.0),
-            force=os.getenv("CINESCRAPPER_FORCE", "false").lower() in {"1", "true", "yes", "y"},
-            resume=os.getenv("CINESCRAPPER_RESUME", "false").lower() in {"1", "true", "yes", "y"},
+            batch_size=int(section.get("batch_size", 10)),
+            wiki_rate_limit=float(section.get("wiki_rate_limit", 1.5)),
+            apple_music_rate_limit=float(section.get("apple_music_rate_limit", 2.0)),
+            rate_limit_jitter=float(section.get("rate_limit_jitter", 0.25)),
+            max_retries=int(section.get("max_retries", 3)),
+            retry_base_delay=float(section.get("retry_base_delay", 2.0)),
+            retry_max_delay=float(section.get("retry_max_delay", 60.0)),
+            cache_ttl_seconds=int(section.get("cache_ttl_seconds", 604800)),
+            request_timeout=float(section.get("request_timeout", 15.0)),
         )
 
     def validate(self) -> None:

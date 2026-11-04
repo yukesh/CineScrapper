@@ -3,9 +3,7 @@
 
 from __future__ import annotations
 
-from cinescrapper.env import load_project_env
-
-load_project_env()
+from cinescrapper.env import add_mongo_uri_profile_argument, resolve_mongo_settings
 
 
 import argparse
@@ -27,8 +25,6 @@ from cinescrapper.wiki_client import WikiClient
 LOGGER = logging.getLogger("cinescrapper.export_missing_cinemas")
 
 DEFAULT_MASTER_PAGE = "Lists_of_Tamil-language_films"
-DEFAULT_DATABASE = "cinescrapper"
-DEFAULT_COLLECTION = "cinemas"
 FUZZY_MATCH_THRESHOLD = 0.86
 
 
@@ -206,17 +202,17 @@ def parse_args():
     parser.add_argument(
         "--uri",
         default=None,
-        help="MongoDB URI; defaults to MONGODB_URI/CINESCRAPPER_MONGO_URI.",
+        help="MongoDB URI; defaults to the configured properties profile.",
     )
     parser.add_argument(
         "--database",
         default=None,
-        help="MongoDB database (default: MONGODB_DATABASE or cinescrapper).",
+        help="MongoDB database; defaults to properties or MONGODB_DATABASE.",
     )
     parser.add_argument(
         "--collection",
         default=None,
-        help="MongoDB collection (default: MONGODB_COLLECTION or cinemas).",
+        help="MongoDB collection; defaults to properties or MONGODB_COLLECTION.",
     )
     parser.add_argument(
         "--fuzzy-threshold",
@@ -231,16 +227,17 @@ def parse_args():
         help="Logging verbosity.",
     )
 
+    add_mongo_uri_profile_argument(parser)
     return parser.parse_args()
 
 
 def main() -> int:
-    try:
-        load_project_env()
-    except ImportError:
-        pass
-
     args = parse_args()
+    try:
+        mongo = resolve_mongo_settings(profile=args.mongo_uri_profile, uri=args.uri, database=args.database, collection=args.collection)
+    except ValueError as exc:
+        LOGGER.error("%s", exc)
+        return 2
 
     logging.basicConfig(
         level=getattr(logging, args.log_level),
@@ -257,22 +254,9 @@ def main() -> int:
 
     args.fuzzy_threshold = args.fuzzy_threshold
 
-    uri = (
-            args.uri
-            or os.getenv("MONGODB_URI")
-            or os.getenv("CINESCRAPPER_MONGO_URI")
-            or "mongodb://localhost:27017"
-    )
-    database_name = (
-            args.database
-            or os.getenv("MONGODB_DATABASE")
-            or DEFAULT_DATABASE
-    )
-    collection_name = (
-            args.collection
-            or os.getenv("MONGODB_COLLECTION")
-            or DEFAULT_COLLECTION
-    )
+    uri = mongo["uri"]
+    database_name = mongo["database"]
+    collection_name = mongo["collection"]
 
     output_path = args.output or Path(
         f"reports/missing_cinemas_{args.start_year}_{args.end_year}.json"
@@ -320,7 +304,7 @@ def main() -> int:
             len(existing_documents),
         )
 
-        config = ScraperConfig.from_env()
+        config = ScraperConfig.from_properties()
         config.validate()
 
         wiki_client = WikiClient(

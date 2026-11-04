@@ -19,16 +19,13 @@ Features:
 Fuzzy suggestions are never automatically used to update MongoDB.
 """
 
-from cinescrapper.env import load_project_env
-
-load_project_env()
+from cinescrapper.env import add_mongo_uri_profile_argument, resolve_mongo_settings
 
 import argparse
 import csv
 import difflib
 import json
 import logging
-import os
 import re
 import sys
 
@@ -50,7 +47,6 @@ AUDIO_EXTENSIONS = {
     ".opus",
 }
 
-DEFAULT_COLLECTION = "cinemas"
 DEFAULT_SOUNDTRACK_NAME = "Original Soundtrack"
 MAX_REVIEW_CANDIDATES = 3
 
@@ -878,23 +874,10 @@ def parse_args():
         help="Path to the scanner's JSON manifest.",
     )
 
-    parser.add_argument(
-        "--mongo-uri",
-        default=None,
-        help="MongoDB URI; defaults to CINESCRAPPER_MONGO_URI or MONGODB_URI from .env.",
-    )
-
-    parser.add_argument(
-        "--mongo-db",
-        default=os.getenv("CINESCRAPPER_MONGODB_DATABASE") or os.getenv("MONGODB_DATABASE") or "cinescrapper",
-        help="MongoDB database name (defaults to .env).",
-    )
-
-    parser.add_argument(
-        "--mongo-collection",
-        default=os.getenv("CINESCRAPPER_MONGODB_COLLECTION") or os.getenv("MONGODB_COLLECTION") or DEFAULT_COLLECTION,
-        help=f"MongoDB collection (defaults to .env or {DEFAULT_COLLECTION}).",
-    )
+    add_mongo_uri_profile_argument(parser)
+    parser.add_argument("--mongo-uri", help="MongoDB URI; defaults to the selected properties profile.")
+    parser.add_argument("--mongo-db", help="MongoDB database; defaults to properties or MONGODB_DATABASE.")
+    parser.add_argument("--mongo-collection", help="MongoDB collection; defaults to properties or MONGODB_COLLECTION.")
 
     parser.add_argument(
         "--report-dir",
@@ -918,28 +901,21 @@ def parse_args():
 
 
 def main():
-    # Load .env when python-dotenv is installed.
-    try:
-        load_project_env()
-    except ImportError:
-        pass
-
     args = parse_args()
     configure_logging(args.log_level)
 
-    mongo_uri = (
-        args.mongo_uri
-        or os.getenv("CINESCRAPPER_MONGO_URI")
-        or os.getenv("MONGODB_URI")
-        or "mongodb://localhost:27017"
-    )
-
-    if not mongo_uri:
-        logger.error(
-            "MongoDB URI missing. Set CINESCRAPPER_MONGO_URI or MONGODB_URI "
-            "in the project-root .env, or pass --mongo-uri."
+    try:
+        mongo = resolve_mongo_settings(
+            profile=args.mongo_uri_profile,
+            uri=args.mongo_uri,
+            database=args.mongo_db,
+            collection=args.mongo_collection,
         )
+    except ValueError as exception:
+        logger.error("%s", exception)
         return 2
+
+    mongo_uri = mongo["uri"]
 
     try:
         entries = load_manifest(args.manifest)
@@ -963,10 +939,11 @@ def main():
         client.admin.command("ping")
 
         logger.info("MongoDB connection successful.")
+        logger.info("Target collection: %s.%s", mongo["database"], mongo["collection"])
         logger.info("Mode: %s", "APPLY" if args.apply else "DRY RUN")
         logger.info("Manifest entries: %d", len(entries))
 
-        collection = client[args.mongo_db][args.mongo_collection]
+        collection = client[mongo["database"]][mongo["collection"]]
         catalogue = load_cinema_catalogue(collection)
 
         for entry in entries:

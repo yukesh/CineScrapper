@@ -5,9 +5,7 @@ Dry-run is the default. Only entries whose status is exactly "approved" are
 considered. Existing cinema documents and soundtrack_wiki are never updated.
 """
 
-from cinescrapper.env import load_project_env
-
-load_project_env()
+from cinescrapper.env import add_mongo_uri_profile_argument, resolve_mongo_settings
 
 import argparse
 import json
@@ -42,21 +40,23 @@ def make_client(uri):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, help="Reviewed JSON from export_local_cinema_candidates.py")
-    parser.add_argument("--uri", default=os.getenv("CINESCRAPPER_MONGO_URI", os.getenv("MONGODB_URI", "mongodb://localhost:27017")))
-    parser.add_argument("--database", default=os.getenv("CINESCRAPPER_MONGODB_DATABASE", os.getenv("MONGODB_DATABASE", "cinescrapper")))
-    parser.add_argument("--collection", default=os.getenv("CINESCRAPPER_MONGODB_COLLECTION", os.getenv("MONGODB_COLLECTION", "cinemas")))
+    parser.add_argument("--uri", default=None)
+    parser.add_argument("--database", default=None)
+    parser.add_argument("--collection", default=None)
     parser.add_argument("--apply", action="store_true", help="Insert approved entries; default is dry-run.")
+    add_mongo_uri_profile_argument(parser)
     args = parser.parse_args()
+    mongo = resolve_mongo_settings(profile=args.mongo_uri_profile, uri=args.uri, database=args.database, collection=args.collection)
 
     data = json.loads(Path(args.input).expanduser().read_text(encoding="utf-8"))
     entries = data if isinstance(data, list) else data.get("missing", [])
     if not isinstance(entries, list):
         raise ValueError("Input must be a list or contain a missing list.")
 
-    client = make_client(args.uri)
+    client = make_client(mongo["uri"])
     try:
         client.admin.command("ping")
-        collection = client[args.database][args.collection]
+        collection = client[mongo["database"]][mongo["collection"]]
         print(f"Mode: {'APPLY' if args.apply else 'DRY RUN'}")
         inserted = skipped = rejected = 0
         for entry in entries:

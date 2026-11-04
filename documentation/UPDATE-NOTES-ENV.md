@@ -1,11 +1,5 @@
-Environment configuration update for CineScrapper 0.2.1-dev
+# Configuration change notes
 
-- Added cinescrapper/env.py to load the project-root .env consistently regardless of current working directory.
-- Applied the loader to scripts that read environment variables or MongoDB settings.
-- Standardized support for CINESCRAPPER_MONGO_URI / MONGODB_URI and database/collection aliases.
-- Made soundtrack reconciliation database and collection arguments default from .env instead of requiring the database argument.
-- Updated the MongoDB ping helper so importing it does not initiate a live database connection.
-- Added .env.example, environment documentation, and tests/test_env.py.
-- Added python-dotenv to requirements.txt (it was already in pyproject.toml).
+URI profiles in `[mongodb.uris]` map profile names to environment-variable names. The actual URI values stay in the environment. The `cinescrapper.properties.example` template was removed; create the local properties file yourself. The file is ignored by Git.
 
-No real credentials are included. Copy .env.example to .env and edit it locally.
+All MongoDB commands use the shared resolver for URI, database, and collection selection. Missing required values produce a clear error instead of silently connecting to localhost or a generic default database. The scraper still selects its collection from the lowercase language unless `--mongo-collection` is provided. See the [configuration guide](ENVIRONMENT_CONFIGURATION.md) and [command reference](CineScrapper-Command-Reference.md).

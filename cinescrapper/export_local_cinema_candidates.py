@@ -5,9 +5,7 @@ The output is a review file, not an automatic insert. Set status to "approved"
 only after checking possible multilingual/title variants.
 """
 
-from cinescrapper.env import load_project_env
-
-load_project_env()
+from cinescrapper.env import add_mongo_uri_profile_argument, resolve_mongo_settings
 
 import argparse
 import difflib
@@ -43,22 +41,24 @@ def make_client(uri):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True, help="JSON output from scan_library.py")
-    parser.add_argument("--uri", default=os.getenv("CINESCRAPPER_MONGO_URI", os.getenv("MONGODB_URI", "mongodb://localhost:27017")))
-    parser.add_argument("--database", default=os.getenv("CINESCRAPPER_MONGODB_DATABASE", os.getenv("MONGODB_DATABASE", "cinescrapper")))
-    parser.add_argument("--collection", default=os.getenv("CINESCRAPPER_MONGODB_COLLECTION", os.getenv("MONGODB_COLLECTION", "cinemas")))
+    parser.add_argument("--uri", default=None)
+    parser.add_argument("--database", default=None)
+    parser.add_argument("--collection", default=None)
     parser.add_argument("--output", default="reports/local_cinemas_for_review.json")
     parser.add_argument("--threshold", type=float, default=0.55, help="Minimum similarity score for suggestions, 0-1.")
+    add_mongo_uri_profile_argument(parser)
     args = parser.parse_args()
+    mongo = resolve_mongo_settings(profile=args.mongo_uri_profile, uri=args.uri, database=args.database, collection=args.collection)
 
     data = json.loads(Path(args.manifest).expanduser().read_text(encoding="utf-8"))
     entries = data if isinstance(data, list) else data.get("items", [])
     if not isinstance(entries, list):
         raise ValueError("Manifest must be a list or contain an items list.")
 
-    client = make_client(args.uri)
+    client = make_client(mongo["uri"])
     try:
         client.admin.command("ping")
-        collection = client[args.database][args.collection]
+        collection = client[mongo["database"]][mongo["collection"]]
         catalogue = list(collection.find({}, {"title": 1, "year": 1}))
         missing = []
         exact_count = 0

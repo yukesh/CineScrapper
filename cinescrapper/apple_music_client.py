@@ -13,7 +13,7 @@ from cinescrapper.retry import RetryableHttpError, parse_retry_after, run_with_r
 logger = get_logger()
 
 HEADERS = {
-    "User-Agent": "CineScrapper/0.2.0",
+    "User-Agent": "CineScrapper/0.3.0",
     "Accept": "application/json",
     "Accept-Language": "en-US,en;q=0.9",
 }

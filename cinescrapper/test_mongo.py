@@ -12,8 +12,7 @@ def main() -> int:
     uri = os.getenv("CINESCRAPPER_MONGO_URI") or os.getenv("MONGODB_URI")
     if not uri:
         raise RuntimeError(
-            "MongoDB URI missing. Set CINESCRAPPER_MONGO_URI or MONGODB_URI "
-            "in the project-root .env file."
+            "MongoDB URI missing. Set [mongodb] uri in cinescrapper.properties."
         )
 
     client = MongoClient(uri, serverSelectionTimeoutMS=5000)

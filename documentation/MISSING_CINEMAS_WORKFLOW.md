@@ -1,10 +1,10 @@
 # Find and import missing cinema records
 
-These commands compare Wikipedia's yearly lists with the existing MongoDB `cinescrapper.cinemas` collection. The export command is read-only; importing is a separate, explicit step.
+These commands compare Wikipedia's yearly lists with the configured MongoDB database and collection. The export command is read-only; importing is a separate, explicit step.
 
 ## 1. Export candidates (read-only)
 
-From the project root, activate the project virtual environment and ensure your existing `.env` or shell has the correct `CINESCRAPPER_MONGO_URI` (or `MONGODB_URI`). Do not put credentials into a shared command or commit them.
+From the project root, activate the project virtual environment and ensure `cinescrapper.properties` contains the correct MongoDB URI. Do not put credentials into a shared command or commit them.
 
 ```bash
 python -m cinescrapper.export_missing_cinemas \

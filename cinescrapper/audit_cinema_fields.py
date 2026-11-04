@@ -5,9 +5,7 @@ values (including False) are preserved.
 """
 
 
-from cinescrapper.env import load_project_env
-
-load_project_env()
+from cinescrapper.env import add_mongo_uri_profile_argument, resolve_mongo_settings
 
 import argparse
 import os
@@ -20,10 +18,11 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Audit missing default flags in CineScrapper cinema documents."
     )
-    parser.add_argument("--uri", default=os.getenv("CINESCRAPPER_MONGO_URI") or os.getenv("MONGODB_URI") or "mongodb://localhost:27017", help="MongoDB connection URI.")
-    parser.add_argument("--database", default=os.getenv("CINESCRAPPER_MONGODB_DATABASE") or os.getenv("MONGODB_DATABASE") or "cinescrapper", help="MongoDB database name.")
-    parser.add_argument("--collection", default=os.getenv("CINESCRAPPER_MONGODB_COLLECTION") or os.getenv("MONGODB_COLLECTION") or "cinemas", help="MongoDB collection name.")
+    parser.add_argument("--uri", default=None, help="MongoDB connection URI.")
+    parser.add_argument("--database", default=None, help="MongoDB database name.")
+    parser.add_argument("--collection", default=None, help="MongoDB collection name.")
     parser.add_argument("--apply", action="store_true", help="Write missing fields; otherwise dry-run only.")
+    add_mongo_uri_profile_argument(parser)
     return parser.parse_args()
 
 
@@ -118,13 +117,14 @@ def audit_collection(collection, apply_changes: bool) -> dict[str, int]:
 
 def main():
     args = parse_args()
+    mongo = resolve_mongo_settings(profile=args.mongo_uri_profile, uri=args.uri, database=args.database, collection=args.collection)
     print(f"Mode: {'APPLY' if args.apply else 'DRY RUN'}")
-    print(f"Database: {args.database}")
-    print(f"Collection: {args.collection}\n")
-    client = create_mongo_client(args.uri)
+    print(f"Database: {mongo["database"]}")
+    print(f"Collection: {mongo["collection"]}\n")
+    client = create_mongo_client(mongo["uri"])
     try:
         client.admin.command("ping")
-        stats = audit_collection(client[args.database][args.collection], args.apply)
+        stats = audit_collection(client[mongo["database"]][mongo["collection"]], args.apply)
     finally:
         client.close()
     print("\nAudit summary\n-------------")

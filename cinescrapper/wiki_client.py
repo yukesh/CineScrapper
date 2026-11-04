@@ -28,7 +28,7 @@ class WikiClient:
 
     def call_wiki(self, link: str) -> str:
         url = urljoin(self._base_url.rstrip("/") + "/", str(link))
-        headers = {"User-Agent": "CineScrapper/0.2.0"}
+        headers = {"User-Agent": "CineScrapper/0.23.0"}
 
         def operation():
             self._rate_limiter.acquire()

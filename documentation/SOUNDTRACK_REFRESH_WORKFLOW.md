@@ -18,8 +18,6 @@ Use your actual language-root path. The manifest should reflect the current file
 ```bash
 python -m cinescrapper.reconcile_soundtracks \
   --manifest reports/Thamizh-library-scan.json \
-  --mongo-uri "$CINESCRAPPER_MONGO_URI" \
-  --mongo-db cinescrapper \
   --report-dir reports/Thamizh-refresh
 ```
 

@@ -7,8 +7,9 @@ Rules:
    "1 - 01 - Song.m4a" -> "Song.m4a"
    "03. Song.lrc"       -> "Song.lrc"
 2. Remove hyphens at the beginning and end of the filename stem.
-3. Remove "(Original Motion Picture Soundtrack)" from folder names.
-4. If a folder's immediate parent is named exactly YYYY, append " [YYYY]"
+3. Replace parentheses with square brackets in file and folder names.
+4. Remove "(Original Motion Picture Soundtrack)" from folder names.
+5. If a folder's immediate parent is named exactly YYYY, append " [YYYY]"
    to that folder name unless that year suffix is already present.
 
 Default mode is DRY RUN. Nothing is renamed unless --apply is supplied.
@@ -75,6 +76,7 @@ def clean_file_name(path: Path) -> str:
     # Remove whitespace around the stem and before the extension.
     # Collapse multiple consecutive whitespace characters into one space.
     stem = re.sub(r"\s+", " ", stem).strip()
+    stem = stem.translate(str.maketrans({"(": "[", ")": "]"}))
 
     if not stem:
         LOG.warning("Skipping name that would become empty: %s", path)
@@ -90,6 +92,7 @@ def clean_folder_name(path: Path) -> str:
     name = re.sub(r"\s*[-–—]+\s*$", "", name)
     name = re.sub(r"^\s*[-–—]+\s*", "", name)
     name = re.sub(r"\s+", " ", name).strip()
+    name = name.translate(str.maketrans({"(": "[", ")": "]"}))
 
     parent_name = path.parent.name
     parent_year = parent_name if YEAR_RE.fullmatch(parent_name) else None

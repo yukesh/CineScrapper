@@ -28,13 +28,13 @@ From the project root:
 ```bash
 source venv/bin/activate
 
-python -m cinescrapper.migrate_soundtrack_wiki --uri "$CINESCRAPPER_MONGO_URI"
+python -m cinescrapper.migrate_soundtrack_wiki
 ```
 
 This is a dry run. If the counts and conflict list are expected, apply:
 
 ```bash
-python -m cinescrapper.migrate_soundtrack_wiki --uri "$CINESCRAPPER_MONGO_URI" --apply
+python -m cinescrapper.migrate_soundtrack_wiki --apply
 ```
 
 The migration renames `soundtrack` to `soundtrack_wiki` only when `soundtrack_wiki` does not already exist. It does not merge or overwrite a pre-existing `soundtrack_wiki`.
@@ -59,8 +59,6 @@ Dry run:
 ```bash
 python -m cinescrapper.reconcile_soundtracks \
   --manifest reports/Thamizh-library-scan.json \
-  --mongo-uri "$CINESCRAPPER_MONGO_URI" \
-  --mongo-db cinescrapper \
   --report-dir reports/Thamizh-reconciliation
 ```
 
@@ -71,8 +69,6 @@ Apply only after the dry-run output looks correct:
 ```bash
 python -m cinescrapper.reconcile_soundtracks \
   --manifest reports/Thamizh-library-scan.json \
-  --mongo-uri "$CINESCRAPPER_MONGO_URI" \
-  --mongo-db cinescrapper \
   --report-dir reports/Thamizh-reconciliation \
   --apply
 ```
@@ -93,6 +89,20 @@ The local `soundtrack` object is written in this minimal form:
 
 Existing `add_collection` selections are preserved for matching relative paths. Tracks absent from a later scan are not automatically deleted.
 
+## 3. Copy tracks selected for a collection
+
+After selecting tracks by setting `add_collection: true` in MongoDB, use the copy script to stage them in a target folder. The script uses the same MongoDB settings from `cinescrapper.properties` and environment variables as the other database tools. It previews the copy plan by default.
+
+```bash
+python -m cinescrapper.copy_collection_tracks \
+  --source-root "/your/music/root/Thamizh" \
+  --target-folder "/your/collection"
+```
+
+Review the paths, then add `--apply` to copy them. Each selected audio track is copied with its original filename. A same-stem `.lrc` file beside the source audio is copied too. A cinema with one selected track places the file directly under the target year folder; a cinema with multiple selected tracks gets a cinema subfolder under that year.
+
+The script refuses to overwrite existing destination files. Choose an empty target folder or resolve any reported collisions before retrying.
+
 ## 4. Find local cinema folders missing from MongoDB
 
 Export candidates:
@@ -100,7 +110,6 @@ Export candidates:
 ```bash
 python -m cinescrapper.export_local_cinema_candidates \
   --manifest reports/Thamizh-library-scan.json \
-  --uri "$CINESCRAPPER_MONGO_URI" \
   --output reports/local_cinemas_for_review.json
 ```
 
@@ -110,8 +119,7 @@ Dry-run import:
 
 ```bash
 python -m cinescrapper.import_local_cinemas \
-  --input reports/local_cinemas_for_review.json \
-  --uri "$CINESCRAPPER_MONGO_URI"
+  --input reports/local_cinemas_for_review.json
 ```
 
 Apply after reviewing:
@@ -119,7 +127,6 @@ Apply after reviewing:
 ```bash
 python -m cinescrapper.import_local_cinemas \
   --input reports/local_cinemas_for_review.json \
-  --uri "$CINESCRAPPER_MONGO_URI" \
   --apply
 ```
 
@@ -127,12 +134,6 @@ This import creates a minimal cinema document with `title`, `year`, `downloaded:
 
 ## MongoDB URI
 
-The commands above use the URI from `CINESCRAPPER_MONGO_URI`. If your `.env` file defines it, load it into the shell first:
-
-```bash
-set -a
-source .env
-set +a
-```
+All commands use the selected URI profile and database/collection from `cinescrapper.properties`. Pass `--mongo-uri-profile NAME` to select a different configured profile for a run.
 
 Do not print or share your URI because it may contain credentials.

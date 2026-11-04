@@ -80,7 +80,7 @@ def discover_movies(master_wiki_page: str, year: int, wiki_client: WikiClient | 
 def scrape_cinemas(_master_wiki_page: str, _year: int, mongo_writer=None, config=None, end_year: int | None = None):
     """Scrape one year or an inclusive range of years in ascending order."""
     from cinescrapper.config import ScraperConfig
-    config = config or ScraperConfig.from_env()
+    config = config or ScraperConfig.from_properties()
     config.validate()
 
     if end_year is not None and _year > end_year:
@@ -116,7 +116,7 @@ def scrape_cinemas(_master_wiki_page: str, _year: int, mongo_writer=None, config
             force=config.force,
             resume=config.resume,
         )
-        job_id = f"{_master_wiki_page}:{year}:v0.2.0"
+        job_id = f"{_master_wiki_page}:{year}:v0.3.0"
         try:
             results[year] = batch_processor.process(movies, job_id, year)
         except Exception:

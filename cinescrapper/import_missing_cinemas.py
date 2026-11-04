@@ -7,9 +7,7 @@ by this script; review them separately to avoid duplicate cinema records.
 """
 from __future__ import annotations
 
-from cinescrapper.env import load_project_env
-
-load_project_env()
+from cinescrapper.env import add_mongo_uri_profile_argument, resolve_mongo_settings
 
 
 import argparse
@@ -80,11 +78,12 @@ def parse_args():
         description="Dry-run or import manually approved missing cinema documents."
     )
     parser.add_argument("--input", type=Path, default=Path("reports/missing_cinemas.json"))
-    parser.add_argument("--uri", default=None, help="MongoDB URI; defaults to MONGODB_URI/CINESCRAPPER_MONGO_URI.")
+    parser.add_argument("--uri", default=None, help="MongoDB URI; defaults to the configured properties profile.")
     parser.add_argument("--database", default=None)
     parser.add_argument("--collection", default=None)
     parser.add_argument("--apply", action="store_true", help="Actually insert approved documents; default is dry-run.")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
+    add_mongo_uri_profile_argument(parser)
     return parser.parse_args()
 
 
@@ -106,12 +105,8 @@ def load_approved(path: Path) -> list[dict]:
 
 
 def main() -> int:
-    try:
-        load_project_env()
-    except ImportError:
-        pass
-
     args = parse_args()
+    mongo = resolve_mongo_settings(profile=args.mongo_uri_profile, uri=args.uri, database=args.database, collection=args.collection)
     logging.basicConfig(
         level=getattr(logging, args.log_level),
         format="%(asctime)s %(levelname)s %(name)s - %(message)s",
@@ -126,9 +121,9 @@ def main() -> int:
         LOGGER.error("Unable to read approved entries: %s", exc)
         return 2
 
-    uri = args.uri or os.getenv("CINESCRAPPER_MONGO_URI") or os.getenv("MONGODB_URI") or "mongodb://localhost:27017"
-    database = args.database or os.getenv("CINESCRAPPER_MONGODB_DATABASE") or os.getenv("MONGODB_DATABASE") or "cinescrapper"
-    collection_name = args.collection or os.getenv("CINESCRAPPER_MONGODB_COLLECTION") or os.getenv("MONGODB_COLLECTION") or "cinemas"
+    uri = mongo["uri"]
+    database = mongo["database"]
+    collection_name = mongo["collection"]
 
     LOGGER.info("Mode: %s", "APPLY" if args.apply else "DRY RUN")
     LOGGER.info("Approved entries loaded: %d", len(approved))

@@ -5,9 +5,7 @@ Dry-run is the default. Existing soundtrack_wiki values are never overwritten.
 Documents containing both fields are reported for manual review.
 """
 
-from cinescrapper.env import load_project_env
-
-load_project_env()
+from cinescrapper.env import add_mongo_uri_profile_argument, resolve_mongo_settings
 
 import argparse
 import os
@@ -31,20 +29,22 @@ def make_client(uri):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--uri", default=os.getenv("CINESCRAPPER_MONGO_URI", os.getenv("MONGODB_URI", "mongodb://localhost:27017")))
-    parser.add_argument("--database", default=os.getenv("CINESCRAPPER_MONGODB_DATABASE", os.getenv("MONGODB_DATABASE", "cinescrapper")))
-    parser.add_argument("--collection", default=os.getenv("CINESCRAPPER_MONGODB_COLLECTION", os.getenv("MONGODB_COLLECTION", "cinemas")))
+    parser.add_argument("--uri", default=None)
+    parser.add_argument("--database", default=None)
+    parser.add_argument("--collection", default=None)
     parser.add_argument("--apply", action="store_true", help="Apply the field rename; otherwise dry-run.")
+    add_mongo_uri_profile_argument(parser)
     args = parser.parse_args()
+    mongo = resolve_mongo_settings(profile=args.mongo_uri_profile, uri=args.uri, database=args.database, collection=args.collection)
 
-    client = make_client(args.uri)
+    client = make_client(mongo["uri"])
     try:
         client.admin.command("ping")
-        collection = client[args.database][args.collection]
+        collection = client[mongo["database"]][mongo["collection"]]
         legacy = list(collection.find({"soundtrack": {"$exists": True}}, {"title": 1, "year": 1, "soundtrack_wiki": 1}))
         to_rename = [doc for doc in legacy if "soundtrack_wiki" not in doc]
         conflicts = [doc for doc in legacy if "soundtrack_wiki" in doc]
-        print(f"Database: {args.database}.{args.collection}")
+        print(f"Database: {mongo["database"]}.{mongo["collection"]}")
         print(f"Mode: {'APPLY' if args.apply else 'DRY RUN'}")
         print(f"Legacy soundtrack fields found: {len(legacy)}")
         print(f"Safe to rename: {len(to_rename)}")

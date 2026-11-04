@@ -214,3 +214,5 @@ __marimo__/
 .aider*
 
 /soundtrack_reports
+# Local connection and runtime settings
+cinescrapper.properties
