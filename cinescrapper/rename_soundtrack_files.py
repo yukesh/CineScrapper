@@ -124,7 +124,9 @@ def clean_folder_name(path: Path) -> str:
             audio_format = match.group(1).strip()
             name = f"{title} [{year}] {audio_format}"
         else:
-            name = f"{name} [{year}]".strip()
+            # Cinema folders directly under a year folder are part of the
+            # ALAC library unless an explicit format label says otherwise.
+            name = f"{name} [{year}] ALAC".strip()
 
     if not name:
         LOG.warning("Skipping folder that would become empty: %s", path)
