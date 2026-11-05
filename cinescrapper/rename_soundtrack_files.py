@@ -8,7 +8,8 @@ Rules:
    "03. Song.lrc"       -> "Song.lrc"
 2. Remove hyphens at the beginning and end of the filename stem.
 3. Replace parentheses with square brackets in file and folder names.
-4. Remove "(Original Motion Picture Soundtrack)" from folder names.
+4. Remove "(Original Motion Picture Soundtrack)" and an optional following
+   "- EP" suffix from folder names.
 5. If a folder's immediate parent is named exactly YYYY, append " [YYYY]"
    to that folder name unless that year suffix is already present.
 
@@ -30,7 +31,8 @@ LOG = logging.getLogger("soundtrack_rename")
 YEAR_RE = re.compile(r"^(?:19|20)\d{2}$")
 YEAR_SUFFIX_RE = re.compile(r"\[((?:19|20)\d{2})\]")
 OST_FOLDER_RE = re.compile(
-    r"\s*\(\s*Original\s+Motion\s+Picture\s+Soundtrack\s*\)\s*",
+    r"\s*\(\s*Original\s+Motion\s+Picture\s+Soundtrack\s*\)"
+    r"\s*(?:[-–—]\s*EP\b)?\s*",
     re.IGNORECASE,
 )
 
