@@ -73,7 +73,7 @@ def main():
         "hindi": "Lists_of_Hindi-language_films",
         "telugu": "Lists_of_Telugu-language_films",
         "malayalam": "Lists_of_Malayalam-language_films",
-        "kannada": "Lists_of_Kannada-language_films",
+        "kannada": "Lists_of_Indian_films#Kannada",
     }
     wiki_source = args.wiki_source or wiki_sources[args.language]
     mongo = mongo_settings(args.mongo_uri_profile)

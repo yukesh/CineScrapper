@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import unquote, urlsplit
 
 from cinescrapper import cine_constants, cine_helper, cine_parser
 from cinescrapper.batch_processor import BatchProcessor
@@ -15,6 +16,30 @@ from cinescrapper.wiki_client import WikiClient
 from cinescrapper.apple_music_client import AppleMusicClient
 
 logger = get_logger()
+
+
+def _film_title_pattern(master_wiki_page: str) -> re.Pattern:
+    """Build the yearly-list title filter from a Wikipedia page or section."""
+    page = str(master_wiki_page or "").split("?")[0]
+    parsed = urlsplit(page)
+    fragment = unquote(parsed.fragment).replace("_", " ").strip()
+    article = unquote(parsed.path.rsplit("/", 1)[-1]).replace("_", " ")
+
+    # The combined Indian films page is organized by language sections, so its
+    # URL fragment identifies which section's yearly pages the scraper wants.
+    if article.casefold() == "lists of indian films" and fragment:
+        language = fragment
+    else:
+        match = re.search(r"Lists? of (.+?)(?:-language)? films", article, re.I)
+        language = match.group(1) if match else "Tamil"
+
+    # The command-line collection name uses "thamizh" while Wikipedia calls
+    # the language "Tamil".
+    language = re.sub(r"\s+", " ", language).strip()
+    if language.casefold() == "thamizh":
+        language = "Tamil"
+    language = language.replace("-", " ")
+    return re.compile(rf"List of {re.escape(language)} films", re.I)
 
 
 def clean_wiki_link(raw_href):
@@ -31,7 +56,7 @@ def find_cinemas(_master_wiki_page: str, _start_year: int, _end_year: int = None
     if div_tag is None:
         logger.info("No Div Tag Found for Cinemas")
         return cinemas
-    a_tags = div_tag.find_all("a", title=re.compile("List of Tamil films", re.I))
+    a_tags = div_tag.find_all("a", title=_film_title_pattern(_master_wiki_page))
     for a in a_tags:
         title = a.get("title")
         year = int(cine_helper.find_year(title))
